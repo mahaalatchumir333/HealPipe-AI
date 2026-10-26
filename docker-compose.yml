@@ -1,0 +1,54 @@
+services:
+  api:
+    build: .
+    environment:
+      HEALPIPE_ENV: production
+      HEALPIPE_TASK_MODE: celery
+      HEALPIPE_JWT_SECRET: ${HEALPIPE_JWT_SECRET:?Set a long random HEALPIPE_JWT_SECRET}
+      HEALPIPE_DB_PATH: /data/healpipe.db
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
+    volumes:
+      - healpipe_data:/data
+      - healpipe_uploads:/app/Data/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  worker:
+    build: .
+    command: ["celery", "-A", "backend.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      HEALPIPE_ENV: production
+      HEALPIPE_TASK_MODE: celery
+      HEALPIPE_JWT_SECRET: ${HEALPIPE_JWT_SECRET:?Set a long random HEALPIPE_JWT_SECRET}
+      HEALPIPE_DB_PATH: /data/healpipe.db
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
+    volumes:
+      - healpipe_data:/data
+      - healpipe_uploads:/app/Data/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set a strong REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  healpipe_data:
+  healpipe_uploads:
+  redis_data:

@@ -1,0 +1,10 @@
+﻿Data/
+*.parquet
+*.csv
+*.xlsx
+*.txt
+*.db
+*.joblib
+.venv/
+__pycache__/
+backend/__pycache__/

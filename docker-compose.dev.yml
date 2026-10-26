@@ -1,0 +1,7 @@
+services:
+  api:
+    environment:
+      HEALPIPE_ENV: development
+      HEALPIPE_JWT_SECRET: local-development-secret-change-before-deployment
+    ports:
+      - "8000:8000"

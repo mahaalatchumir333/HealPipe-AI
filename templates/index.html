@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HealPipe AI</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <div class="page-shell">
+        <nav class="topbar">
+            <div class="brand">🩺 HealPipe AI</div>
+            <div class="nav-links">
+                <a href="/">Overview</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/api/health">Health</a>
+            </div>
+        </nav>
+
+        <header class="hero" id="overview">
+            <div>
+                <p class="eyebrow">Self-healing pipeline monitoring</p>
+                <h1>Operational trust for complex hydraulic sensor systems.</h1>
+                <p class="subtitle">
+                    Detect anomalies, estimate repairs, and keep mission-critical monitoring pipelines online.
+                </p>
+                <div class="cta-row">
+                    <a class="primary" href="/dashboard">Open dashboard</a>
+                    <button class="secondary" id="demoRunButton">Run demo analysis</button>
+                </div>
+            </div>
+            <div class="hero-panel">
+                <div class="metric-card">
+                    <span>System status</span>
+                    <strong id="systemStatus">Healthy</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Fault coverage</span>
+                    <strong id="faultCoverage">--</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Model confidence</span>
+                    <strong id="modelConfidence">--</strong>
+                </div>
+            </div>
+        </header>
+
+        <main class="content-grid">
+            <section class="panel" id="accountPanel">
+                <h2>Account access</h2>
+                <p class="subtitle">Create an account or sign in before submitting telemetry runs.</p>
+                <div class="form-grid">
+                    <label>Username<input id="authUsername" autocomplete="username" minlength="3" maxlength="80" /></label>
+                    <label>Password<input id="authPassword" type="password" autocomplete="current-password" minlength="12" /></label>
+                    <label>MFA code (if enabled)<input id="mfaCode" inputmode="numeric" maxlength="6" /></label>
+                </div>
+                <div class="cta-row">
+                    <button class="primary" id="loginButton">Sign in</button>
+                    <button class="secondary" id="registerButton">Create account</button>
+                    <button class="secondary" id="mfaSetupButton">Set up MFA</button>
+                    <button class="secondary" id="mfaConfirmButton">Confirm MFA</button>
+                </div>
+                <p id="authMessage" role="status" aria-live="polite"></p>
+            </section>
+            <section class="panel">
+                <h2>Upload telemetry</h2>
+                <p>CSV or Parquet with cycle_id, second_in_cycle, and all 10 sensor columns. Maximum 25 MB and 100,000 rows.</p>
+                <form id="uploadForm">
+                    <label for="telemetryFile">Telemetry file</label>
+                    <input id="telemetryFile" type="file" accept=".csv,.parquet" required />
+                    <button class="primary" type="submit">Upload and analyze</button>
+                    <progress id="uploadProgress" max="100" value="0" hidden></progress>
+                    <p id="uploadStatus" role="status" aria-live="polite"></p>
+                </form>
+            </section>
+            <section class="panel">
+                <h2>Current health snapshot</h2>
+                <div id="overviewCards" class="card-grid"></div>
+            </section>
+            <section class="panel">
+                <h2>Recent runs</h2>
+                <div id="runsTable" class="runs-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

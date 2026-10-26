@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HealPipe AI Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <div class="page-shell dashboard-page">
+        <nav class="topbar">
+            <div class="brand">🩺 HealPipe AI</div>
+            <div class="nav-links">
+                <a href="/#overview">Overview</a>
+                <a href="#sensor-explorer">Sensor plot</a>
+                <a href="#audit-inspector">Audit trail</a>
+                <a href="#evaluation">Evaluation</a>
+                <a href="#stress">Stress test</a>
+                <a href="/">Account / sign in</a>
+            </div>
+        </nav>
+
+        <header class="dashboard-header">
+            <div>
+                <p class="eyebrow">Live system diagnostics</p>
+                <h1>Pipeline repair dashboard</h1>
+                <p id="partitionSummary" class="subtitle">Loading partition and cycle details…</p>
+            </div>
+            <button class="primary" id="refreshButton">Refresh data</button>
+        </header>
+
+        <section class="panel" id="overview">
+            <h2>Overview summary</h2>
+            <div id="overviewMetrics" class="card-grid"></div>
+        </section>
+
+        <main class="dashboard-grid" id="sensor-explorer">
+            <section class="panel chart-panel">
+                <div class="panel-heading">
+                    <h2 id="chartHeading">PS1 trend analysis</h2>
+                    <label for="sensorSelect">Sensor
+                        <select id="sensorSelect">
+                            <option>PS1</option><option>PS2</option><option>PS3</option>
+                            <option>FS1</option><option>FS2</option><option>TS1</option>
+                            <option>TS2</option><option>TS3</option><option>TS4</option><option>EPS1</option>
+                        </select>
+                    </label>
+                    <label for="evaluationPartition">Partition
+                        <select id="evaluationPartition">
+                            <option value="test">Held-out test</option>
+                            <option value="validation">Validation</option>
+                        </select>
+                    </label>
+                    <label for="cycleSelect">60-second cycle
+                        <select id="cycleSelect"></select>
+                    </label>
+                    <label class="checkbox-label" for="showGroundTruth">
+                        <input id="showGroundTruth" type="checkbox" />
+                        Show hidden reference (judge mode)
+                    </label>
+                </div>
+                <div class="chart-legend" aria-label="Chart series legend">
+                    <span><i class="legend-reference"></i>Reference (evaluation)</span>
+                    <span><i class="legend-observed"></i>Corrupted / observed</span>
+                    <span><i class="legend-repaired"></i>Measured output</span>
+                    <span><i class="legend-estimated"></i>Estimated</span>
+                    <span><i class="legend-corrected"></i>Corrected</span>
+                    <span><i class="legend-unresolved"></i>Unresolved</span>
+                </div>
+                <svg id="chartSvg" viewBox="0 0 760 320" role="img" aria-label="PS1 sensor time series"></svg>
+                <p class="muted">Select a point to inspect its telemetry, diagnosis, confidence, and repair method.</p>
+            </section>
+            <aside class="panel">
+                <h2>Run summary</h2>
+                <div id="runSummary"></div>
+            </aside>
+        </main>
+
+        <section class="panel" id="audit-inspector">
+            <div class="panel-heading">
+                <h2>Fault audit table</h2>
+                <button class="secondary" id="downloadAuditButton">Download JSONL audit</button>
+            </div>
+            <div id="auditTable" class="audit-table"></div>
+            <section id="pointInspector" class="point-inspector" aria-live="polite">
+                <h3>Point-level inspector</h3>
+                <p>Select a plotted point or audit row.</p>
+            </section>
+        </section>
+
+        <section class="panel" id="evaluation">
+            <h2>Evaluation &amp; metrics</h2>
+            <p class="muted">Held-out labels are only used server-side to compute these aggregate evaluation statistics.</p>
+            <div id="evaluationSummary" class="card-grid"></div>
+            <div class="evaluation-grid">
+                <div>
+                    <h3>Detection performance</h3>
+                    <div id="confusionMatrix" class="audit-table"></div>
+                    <div id="classificationTable" class="audit-table"></div>
+                </div>
+                <div>
+                    <h3>Confidence reliability</h3>
+                    <svg id="reliabilitySvg" viewBox="0 0 500 280" role="img" aria-label="Confidence calibration reliability plot"></svg>
+                    <h3>Repair baselines (injected points)</h3>
+                    <div id="baselineTable" class="audit-table"></div>
+                </div>
+            </div>
+            <h3>Reconstruction accuracy by sensor</h3>
+            <div id="repairTable" class="audit-table"></div>
+        </section>
+
+        <section class="panel" id="stress">
+            <h2>Stress test &amp; simultaneous channel failures</h2>
+            <div id="stressSummary" class="card-grid"></div>
+            <h3>Abstention log</h3>
+            <div id="unresolvedTable" class="audit-table"></div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

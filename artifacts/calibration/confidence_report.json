@@ -1,0 +1,10 @@
+{
+  "method": "LogisticRegression with StandardScaler; grouped out-of-fold Brier score",
+  "samples": 3920,
+  "successes": 3528,
+  "failures": 392,
+  "folds": 5,
+  "tolerance": "1.5 x robust reference scale per sensor",
+  "out_of_fold_brier_score": 0.18794917943094724,
+  "artifact": "artifacts\\calibration\\confidence.joblib"
+}
