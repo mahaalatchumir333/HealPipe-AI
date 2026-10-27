@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import io
+import json
 import struct
 import time
 
@@ -154,16 +155,23 @@ def test_auth_mfa_and_run_access_is_account_scoped(client, monkeypatch):
 
 def test_telemetry_upload_validation():
     frame = pd.DataFrame({
-        "cycle_id": [1],
-        "second_in_cycle": [0],
-        **{sensor: [1.0] for sensor in SENSORS},
+        "cycle_id": [1] * 60,
+        "second_in_cycle": list(range(60)),
+        **{sensor: [1.0] * 60 for sensor in SENSORS},
     })
-    assert len(validate_telemetry(frame)) == 1
+    assert len(validate_telemetry(frame)) == 60
     with pytest.raises(Exception):
         validate_telemetry(frame.drop(columns=["PS1"]))
+    with pytest.raises(Exception):
+        validate_telemetry(frame.iloc[:-1])
     duplicate = pd.concat([frame, frame], ignore_index=True)
     with pytest.raises(Exception):
         validate_telemetry(duplicate)
+    invalid_numeric = frame.copy()
+    invalid_numeric["PS1"] = invalid_numeric["PS1"].astype(object)
+    invalid_numeric.loc[0, "PS1"] = "not-a-number"
+    with pytest.raises(Exception, match="PS1 must contain numeric values"):
+        validate_telemetry(invalid_numeric)
 
 
 def test_evaluation_is_read_only_public_and_reference_values_remain_protected(client):
@@ -185,8 +193,17 @@ def test_evaluation_is_read_only_public_and_reference_values_remain_protected(cl
     assert "injected_fault" not in series.json()
     assert series_payload["points"][0]["acceptance_decision"] in {"accepted", "refused", "retained"}
     assert series_payload["points"][0]["confidence_method"] == "validation_calibrated_logistic_regression"
+    stale_auth_series = client.get(
+        "/api/evaluation/series?partition=test&sensor_id=PS1&include_reference=false",
+        headers={"Authorization": "Bearer expired-or-invalid-token"},
+    )
+    assert stale_auth_series.status_code == 200
     assert client.get(
         "/api/evaluation/series?partition=test&sensor_id=PS1&include_reference=true",
+    ).status_code == 401
+    assert client.get(
+        "/api/evaluation/series?partition=test&sensor_id=PS1&include_reference=true",
+        headers={"Authorization": "Bearer expired-or-invalid-token"},
     ).status_code == 401
 
     _, token = _register_and_login(client, "evaluator")
@@ -205,6 +222,21 @@ def test_evaluation_is_read_only_public_and_reference_values_remain_protected(cl
     assert invalid_cycle.status_code == 422
 
 
+def test_public_rig_endpoint_exposes_sensor_metadata_and_cycle_decisions(client, monkeypatch):
+    expected = {
+        "partition": "validation",
+        "cycle_id": 1,
+        "sensor_map": {"sensors": {"PS1": {"location_area": "not documented"}}},
+        "sensors": {"PS1": [{"sensor_id": "PS1", "status": "Measured"}]},
+    }
+    monkeypatch.setattr("backend.main.evaluation_rig", lambda partition, cycle_id: expected)
+
+    response = client.get("/api/evaluation/rig?partition=validation&cycle_id=1")
+
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
 def test_scenario_api_runs_repeatable_faults_and_evaluates_full_decision(client):
     request = {
         "partition": "validation",
@@ -221,8 +253,36 @@ def test_scenario_api_runs_repeatable_faults_and_evaluates_full_decision(client)
     assert second.status_code == 200
     first_payload = first.json()
     second_payload = second.json()
-    assert first_payload == second_payload
+    assert first_payload["scenario"] == second_payload["scenario"]
+    assert first_payload["metrics"] == second_payload["metrics"]
+    assert first_payload["series"] == second_payload["series"]
+    assert first_payload["run_id"] != second_payload["run_id"]
+    saved_run = database.get_run(first_payload["run_id"])
+    assert saved_run is not None
+    assert saved_run["metrics"]["scenario_parameters"] == first_payload["scenario"]
+    assert saved_run["events"] == first_payload["fault_audit"]
+    fetched = client.get(f"/api/scenarios/runs/{first_payload['run_id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["scenario"] == first_payload["scenario"]
+    assert fetched.json()["metrics"] == first_payload["metrics"]
+    assert fetched.json()["fault_audit"] == first_payload["fault_audit"]
+    download = client.get(
+        f"/api/scenarios/runs/{first_payload['run_id']}/audit"
+    )
+    assert download.status_code == 200
+    lines = download.text.splitlines()
+    assert lines
+    parsed_events = [
+        json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+        for line in lines
+    ]
+    assert parsed_events == first_payload["fault_audit"]
+    assert download.headers["content-type"].startswith("application/x-ndjson")
+    assert all("NaN" not in line and "Infinity" not in line for line in lines)
     assert first_payload["scenario"]["deterministic"] is True
+    assert first_payload["fault_audit"][0]["location_area"] == "not documented"
+    assert first_payload["fault_audit"][0]["component_context"]["context_only"] is True
+    assert "not a diagnosis of a failed component" in first_payload["fault_audit"][0]["location_statement"]
     assert len(first_payload["scenario"]["sensors"]) == 2
     assert first_payload["metrics"]["injected_points"] == 10
     assert {
@@ -305,9 +365,12 @@ def test_async_run_and_upload_jobs_require_auth_and_finish(client, monkeypatch, 
     )
     assert rejected.status_code == 415
 
-    sensors = ",".join(SENSORS)
-    row = ",".join(["1", "0", *["1.0"] * len(SENSORS)])
-    csv_content = f"cycle_id,second_in_cycle,{sensors}\n{row}\n".encode()
+    csv_frame = pd.DataFrame({
+        "cycle_id": [1] * 60,
+        "second_in_cycle": list(range(60)),
+        **{sensor: [1.0] * 60 for sensor in SENSORS},
+    })
+    csv_content = csv_frame.to_csv(index=False).encode()
     uploaded = client.post(
         "/jobs/upload",
         headers=auth,
@@ -316,3 +379,48 @@ def test_async_run_and_upload_jobs_require_auth_and_finish(client, monkeypatch, 
     assert uploaded.status_code == 202
     upload_job_id = uploaded.json()["job_id"]
     assert client.get(f"/jobs/{upload_job_id}", headers=auth).json()["status"] == "completed"
+
+
+def test_demo_upload_requires_flag_and_allows_validated_anonymous_upload(client, monkeypatch, tmp_path):
+    from backend import main
+
+    upload_directory = tmp_path / "demo-uploads"
+    upload_directory.mkdir()
+    monkeypatch.setattr(main, "UPLOADS", upload_directory)
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    csv_frame = pd.DataFrame({
+        "cycle_id": [7] * 60,
+        "second_in_cycle": list(range(60)),
+        **{sensor: [2.0] * 60 for sensor in SENSORS},
+    })
+    file_data = csv_frame.to_csv(index=False).encode()
+    assert client.post(
+        "/jobs/upload",
+        files={"file": ("telemetry.csv", file_data, "text/csv")},
+    ).status_code == 401
+
+    monkeypatch.setenv("DEMO_MODE", "1")
+    assert client.post(
+        "/jobs/upload",
+        files={"file": ("telemetry.pkl", b"pickle", "application/octet-stream")},
+    ).status_code == 415
+    from backend import main
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 4)
+    assert client.post(
+        "/jobs/upload",
+        files={"file": ("too-large.csv", b"12345", "text/csv")},
+    ).status_code == 413
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 25 * 1024 * 1024)
+
+    def finish_upload(job_id, owner_id, name, path):
+        database.update_job(job_id, "completed")
+
+    monkeypatch.setattr("backend.main._process_upload_job", finish_upload)
+    uploaded = client.post(
+        "/jobs/upload",
+        files={"file": ("telemetry.csv", file_data, "text/csv")},
+    )
+    assert uploaded.status_code == 202
+    job_id = uploaded.json()["job_id"]
+    assert client.get(f"/jobs/{job_id}").json()["status"] == "completed"
+    assert client.get("/api/config").json()["demo_upload_enabled"] is True

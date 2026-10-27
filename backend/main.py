@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -8,12 +9,14 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, model_validator
 
 from backend.auth import (
+    bearer,
     current_user,
     issue_token,
     new_totp_secret,
@@ -28,6 +31,7 @@ from backend.database import (
     get_run,
     get_user as get_user_record,
     init_db,
+    insert_run,
     list_runs,
     update_job,
     update_user_mfa,
@@ -37,13 +41,17 @@ from backend.service import (
     create_upload_run,
     current_metrics,
     evaluation_series,
+    evaluation_rig,
     evaluate_scenario,
+    load_sensor_map,
     load_evaluation,
+    load_benchmark,
     select_run_series_cycle,
     sample_chart_points,
 )
 from backend.validation import validate_telemetry
-from pipeline.reconstruct import SENSORS, load_model_map
+from backend.telemetry import load_replay_cycle
+from pipeline.reconstruct import SENSORS, SENSOR_RATES, load_model_map
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "templates"))
@@ -117,7 +125,7 @@ def _process_partition_job(job_id: str, owner_id: int, request: RunRequest) -> N
         raise
 
 
-def _process_upload_job(job_id: str, owner_id: int, name: str, path: Path) -> None:
+def _process_upload_job(job_id: str, owner_id: int | None, name: str, path: Path) -> None:
     try:
         update_job(job_id, "running")
         if path.suffix.lower() == ".csv":
@@ -151,6 +159,25 @@ async def dashboard():
 @app.get("/api/summary")
 def api_summary() -> dict:
     return current_metrics()
+
+
+@app.get("/api/config")
+def api_config() -> dict:
+    schema = json.loads((ROOT / "artifacts" / "sensor_schema.json").read_text(encoding="utf-8"))
+    sensor_map = json.loads((ROOT / "artifacts" / "sensor_map.json").read_text(encoding="utf-8"))["sensors"]
+    return {
+        "demo_upload_enabled": os.getenv("DEMO_MODE") == "1",
+        "processing_grid": "1 Hz; one-second averages",
+        "sensors": [
+            {
+                "sensor_id": sensor,
+                "unit": schema["channels"][sensor]["unit"],
+                "sampling_rate_hz": SENSOR_RATES[sensor],
+                "sensor_type": sensor_map.get(sensor, {}).get("sensor_type", "sensor"),
+            }
+            for sensor in SENSORS
+        ],
+    }
 
 
 @app.post("/auth/register", status_code=201)
@@ -209,7 +236,7 @@ def api_chart() -> dict:
 
 @app.get("/api/evaluation")
 def api_evaluation(
-    partition: str = Query(default="test", pattern="^(validation|test)$"),
+    partition: str = Query(default="test", pattern="^(validation|test|test_v2)$"),
 ) -> dict:
     try:
         return load_evaluation(partition)
@@ -217,10 +244,21 @@ def api_evaluation(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.post("/api/scenarios/evaluate")
-def api_evaluate_scenario(request: ScenarioRequest) -> dict:
+@app.get("/api/benchmark")
+def api_benchmark() -> dict:
     try:
-        return evaluate_scenario(
+        return load_benchmark()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/scenarios/evaluate")
+def api_evaluate_scenario(
+    request: ScenarioRequest,
+    user: dict | None = Depends(optional_user),
+) -> dict:
+    try:
+        result = evaluate_scenario(
             request.partition,
             request.sensor_id,
             request.cycle_id,
@@ -230,8 +268,66 @@ def api_evaluate_scenario(request: ScenarioRequest) -> dict:
             request.severity,
             request.affected_channels,
         )
+        metrics = {
+            **result["metrics"],
+            "scenario_parameters": result["scenario"],
+        }
+        run_id = insert_run(
+            name=f"{request.fault_type} scenario",
+            partition=request.partition,
+            status="completed",
+            metrics=metrics,
+            events=result["fault_audit"],
+            series={request.sensor_id: result["series"]},
+            owner_id=user["id"] if user else None,
+        )
+        result["run_id"] = run_id
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/scenarios/runs/{run_id}/audit")
+def scenario_run_audit(
+    run_id: int,
+    user: dict | None = Depends(optional_user),
+) -> Response:
+    run = get_run(run_id, user["id"] if user else None)
+    if run is None or "scenario_parameters" not in run["metrics"]:
+        raise HTTPException(status_code=404, detail="Scenario run not found.")
+    content = "\n".join(
+        json.dumps(event, allow_nan=False) for event in run["events"]
+    )
+    return Response(
+        content=f"{content}\n" if content else "",
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f'attachment; filename="healpipe-scenario-{run_id}.jsonl"'},
+    )
+
+
+@app.get("/api/scenarios/runs/{run_id}")
+def get_scenario_run(
+    run_id: int,
+    user: dict | None = Depends(optional_user),
+) -> dict:
+    run = get_run(run_id, user["id"] if user else None)
+    if run is None or "scenario_parameters" not in run["metrics"]:
+        raise HTTPException(status_code=404, detail="Scenario run not found.")
+    return {
+        "run_id": run["id"],
+        "name": run["name"],
+        "partition": run["partition"],
+        "status": run["status"],
+        "created_at": run["created_at"],
+        "scenario": run["metrics"]["scenario_parameters"],
+        "metrics": {
+            key: value
+            for key, value in run["metrics"].items()
+            if key != "scenario_parameters"
+        },
+        "fault_audit": run["events"],
+        "series": next(iter(run["series"].values()), {}),
+    }
 
 
 @app.get("/api/evaluation/series")
@@ -240,14 +336,98 @@ def api_evaluation_series(
     sensor_id: str = Query(default="PS1"),
     cycle_id: int | None = Query(default=None, ge=0),
     include_reference: bool = Query(default=False),
-    user: dict | None = Depends(optional_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> dict:
+    user = None
+    if include_reference:
+        user = current_user(credentials)
     if include_reference and user is None:
         raise HTTPException(status_code=401, detail="Authentication is required to reveal reference values.")
     try:
         return evaluation_series(partition, sensor_id, cycle_id, include_reference)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/evaluation/rig")
+def api_evaluation_rig(
+    partition: str = Query(default="test", pattern="^(validation|test)$"),
+    cycle_id: int = Query(ge=0),
+) -> dict:
+    try:
+        return evaluation_rig(partition, cycle_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/telemetry/replay")
+async def api_telemetry_replay(
+    partition: str = Query(default="test", pattern="^(validation|test)$"),
+    cycle_id: int = Query(ge=0),
+    sensor_id: str = Query(default="PS1"),
+    interval_ms: int = Query(default=1000, ge=0, le=5000),
+) -> StreamingResponse:
+    if sensor_id not in SENSORS:
+        raise HTTPException(status_code=422, detail=f"sensor_id must be one of {SENSORS}.")
+    try:
+        recorded_cycle = load_replay_cycle(partition, cycle_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def safe_value(value):
+        if hasattr(value, "item"):
+            value = value.item()
+        if isinstance(value, float) and not pd.notna(value):
+            return None
+        if isinstance(value, dict):
+            return {key: safe_value(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [safe_value(item) for item in value]
+        return value
+
+    async def events():
+        for row in recorded_cycle.to_dict(orient="records"):
+            second = int(row["second_in_cycle"])
+            payload = {
+                "clock_label": "SIMULATED",
+                "cycle_id": int(cycle_id),
+                "second_in_cycle": second,
+                "simulated_time": f"00:{second:02d}",
+                "samples": {
+                    channel: safe_value(row[channel])
+                    for channel in SENSORS
+                },
+                "repair_status": "pending_until_cycle_complete",
+            }
+            yield f"event: tick\ndata: {json.dumps(payload, allow_nan=False)}\n\n"
+            if interval_ms:
+                await asyncio.sleep(interval_ms / 1000)
+
+        series = evaluation_series(partition, sensor_id, cycle_id, False)
+        points = series["points"]
+        statuses: dict[str, int] = {}
+        for point in points:
+            statuses[point["status"]] = statuses.get(point["status"], 0) + 1
+        completed = {
+            "clock_label": "SIMULATED",
+            "cycle_id": int(cycle_id),
+            "sensor_id": sensor_id,
+            "series": series,
+            "status_counts": statuses,
+            "audit_records": [
+                point for point in points
+                if point.get("fault_type") != "healthy"
+            ],
+            "repair_timing": "The offline repair pipeline ran after all 60 recorded seconds were accumulated.",
+        }
+        yield f"event: cycle_complete\ndata: {json.dumps(safe_value(completed), allow_nan=False)}\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/runs")
@@ -278,8 +458,10 @@ def create_partition_job(
 async def upload_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    user: dict = Depends(current_user),
+    user: dict | None = Depends(optional_user),
 ) -> dict:
+    if user is None and os.getenv("DEMO_MODE") != "1":
+        raise HTTPException(status_code=401, detail="Authentication is required for telemetry uploads.")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".csv", ".parquet"}:
         raise HTTPException(status_code=415, detail="Only CSV and Parquet telemetry files are accepted.")
@@ -289,17 +471,18 @@ async def upload_job(
     job_id = str(uuid.uuid4())
     path = UPLOADS / f"{job_id}{suffix}"
     path.write_bytes(content)
-    create_job(job_id, user["id"], str(path))
+    owner_id = user["id"] if user else None
+    create_job(job_id, owner_id, str(path))
     upload_name = Path(file.filename or "telemetry").stem[:100]
     if os.getenv("HEALPIPE_TASK_MODE", "inline").lower() == "celery":
         from backend.tasks import process_upload_task
 
-        process_upload_task.delay(job_id, user["id"], upload_name, str(path))
+        process_upload_task.delay(job_id, owner_id, upload_name, str(path))
     else:
         background_tasks.add_task(
             _process_upload_job,
             job_id,
-            user["id"],
+            owner_id,
             upload_name,
             path,
         )
@@ -307,8 +490,10 @@ async def upload_job(
 
 
 @app.get("/jobs/{job_id}")
-def job_status(job_id: str, user: dict = Depends(current_user)) -> dict:
-    job = get_job(job_id, user["id"])
+def job_status(job_id: str, user: dict | None = Depends(optional_user)) -> dict:
+    if user is None and os.getenv("DEMO_MODE") != "1":
+        raise HTTPException(status_code=401, detail="Authentication is required to inspect jobs.")
+    job = get_job(job_id, user["id"] if user else None)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     return {
@@ -348,3 +533,28 @@ def run_audit(run_id: int, user: dict = Depends(current_user)) -> Response:
         raise HTTPException(status_code=404, detail="Run not found.")
     content = "\n".join(json.dumps(event, allow_nan=False) for event in run["events"])
     return Response(content=f"{content}\n" if content else "", media_type="application/x-ndjson")
+
+
+@app.get("/runs/{run_id}/rig")
+def run_rig(
+    run_id: int,
+    cycle_id: int = Query(ge=0),
+    user: dict = Depends(current_user),
+) -> dict:
+    run = get_run(run_id, user["id"])
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    cycle_events = [
+        event for event in run["events"]
+        if event.get("cycle_id") is not None and int(event["cycle_id"]) == cycle_id
+    ]
+    if not cycle_events:
+        raise HTTPException(status_code=404, detail=f"No audit records exist for cycle {cycle_id}.")
+    return {
+        "cycle_id": cycle_id,
+        "sensor_map": load_sensor_map(),
+        "sensors": {
+            sensor: [event for event in cycle_events if event.get("sensor_id") == sensor]
+            for sensor in SENSORS
+        },
+    }

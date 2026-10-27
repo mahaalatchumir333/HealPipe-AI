@@ -9,11 +9,14 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 
+from pipeline.sensor_schema import load_repair_channels
+
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS = ROOT / "artifacts"
 MODELS = ARTIFACTS / "models"
 MODELS.mkdir(parents=True, exist_ok=True)
-SENSORS = ["PS1", "PS2", "PS3", "FS1", "FS2", "TS1", "TS2", "TS3", "TS4", "EPS1"]
+SENSOR_RATES = load_repair_channels()
+SENSORS = list(SENSOR_RATES)
 DATA_DIR = ROOT / "Data"
 
 

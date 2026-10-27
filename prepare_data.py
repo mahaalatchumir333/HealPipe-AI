@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from project_paths import root_data_dir
+from pipeline.sensor_schema import load_repair_channels
 
 ROOT = Path(__file__).resolve().parent
 DATA = root_data_dir()
@@ -30,13 +31,8 @@ SPLITS = DATA / "splits"
 for d in (RAW, REF, SPLITS):
     d.mkdir(parents=True, exist_ok=True)
 
-# sensor -> samples per second (Hz)
-SENSORS = {
-    "PS1": 100, "PS2": 100, "PS3": 100,
-    "FS1": 10, "FS2": 10,
-    "TS1": 1, "TS2": 1, "TS3": 1, "TS4": 1,
-    "EPS1": 100,
-}
+# sensor -> samples per second (Hz), configured in artifacts/sensor_schema.json
+SENSORS = load_repair_channels()
 CYCLE_SECONDS = 60
 EXPECTED_CYCLES = 2205
 

@@ -14,7 +14,10 @@
                 <a href="/#overview">Overview</a>
                 <a href="#sensor-explorer">Sensor plot</a>
                 <a href="#audit-inspector">Audit trail</a>
+                <a href="#rig-view">Rig schematic</a>
                 <a href="#evaluation">Evaluation</a>
+                <a href="#benchmark">Benchmark</a>
+                <a href="#telemetryReplay">Replay</a>
                 <a href="#stress">Stress test</a>
                 <a href="/">Workflow overview</a>
             </div>
@@ -71,9 +74,21 @@
                 </label>
                 <button class="primary" id="runScenarioButton">Run scenario</button>
             </div>
+            <button class="secondary" id="downloadScenarioButton" disabled>Download saved scenario JSONL</button>
             <div id="scenarioResults" class="scenario-results" aria-live="polite">
                 <p>Choose a fault scenario and run it to compare the complete repair decision.</p>
             </div>
+        </section>
+
+        <section class="panel" id="demoIngestion" hidden>
+            <h2>Local demo telemetry upload</h2>
+            <p class="muted">DEMO_MODE is enabled. CSV/Parquet uploads are limited to 25 MB and must contain supported numeric telemetry with complete 60-second cycles. Pickle/joblib files are not accepted.</p>
+            <form id="demoUploadForm">
+                <label for="demoTelemetryFile">Telemetry file</label>
+                <input id="demoTelemetryFile" type="file" accept=".csv,.parquet" required />
+                <button class="secondary" type="submit">Validate and process</button>
+            </form>
+            <p id="demoUploadStatus" class="muted" aria-live="polite"></p>
         </section>
 
         <main class="dashboard-grid" id="sensor-explorer">
@@ -118,6 +133,33 @@
             </aside>
         </main>
 
+        <section class="panel" id="telemetryReplay">
+            <h2>Live telemetry (recorded-cycle replay)</h2>
+            <p class="muted">This is recorded data played through a SIMULATED clock, not a live acquisition feed. The dashboard streams one stored 1 Hz average per simulated second, accumulates a complete 60-second cycle, and only then runs the existing offline repair pipeline. No repair is performed instantaneously per second.</p>
+            <div class="replay-controls">
+                <button class="secondary" id="replayStartButton">Start recorded-cycle replay</button>
+                <strong id="replayClock" aria-live="polite">SIMULATED — idle</strong>
+                <progress id="replayProgress" max="60" value="0">0 / 60</progress>
+            </div>
+            <p id="replayStatus" class="muted" aria-live="polite">Choose a partition, sensor, and complete cycle above before starting replay.</p>
+        </section>
+
+        <section class="panel" id="rig-view">
+            <h2>Schematic hydraulic rig</h2>
+            <p class="muted">Illustrative layout, not a CAD model and not to scale. Sensor marker positions are schematic indicators; individual physical locations are not documented. Marker fill shows the highest-severity decision state in the selected cycle; its outline shows the most frequent detected fault type. The view auto-orbits slowly; drag to orbit manually, use the mouse wheel to zoom, or use arrow keys and +/- when the rig is focused. Animated flow and the rotating pump impeller are illustrative only, not live telemetry.</p>
+            <div class="rig-legend" aria-label="Rig marker legend">
+                <span><i class="rig-status measured"></i>Measured</span>
+                <span><i class="rig-status estimated"></i>Estimated</span>
+                <span><i class="rig-status corrected"></i>Corrected</span>
+                <span><i class="rig-status unresolved"></i>Unresolved</span>
+                <span><i class="rig-fault"></i>Outline = detected fault</span>
+            </div>
+            <div id="rig3d" class="rig-canvas" role="application" aria-label="Interactive schematic hydraulic test rig" tabindex="0"></div>
+            <div id="rigFallback" class="rig-fallback" hidden></div>
+            <div id="rigSensorList" class="rig-sensor-list" aria-label="Clickable rig sensors"></div>
+            <p id="rigSelection" class="muted" aria-live="polite">Select a sensor marker to load that sensor's chart and audit records for this cycle.</p>
+        </section>
+
         <section class="panel" id="audit-inspector">
             <div class="panel-heading">
                 <h2>Fault audit table</h2>
@@ -151,6 +193,21 @@
             <div id="repairTable" class="audit-table"></div>
         </section>
 
+        <section class="panel" id="benchmark">
+            <h2>Systematic scenario benchmark</h2>
+            <p class="muted">Validation-partition grid across supported fault types, durations, severities, sensor groups, and channel counts. Faults are synthetic. 1 Hz values are one-second averages, and tolerance is a statistical proxy. This benchmark does not establish field reliability.</p>
+            <p id="benchmarkStatus" class="muted" aria-live="polite">Loading generated benchmark report…</p>
+            <div class="benchmark-filters">
+                <label for="benchmarkFaultFilter">Fault type<select id="benchmarkFaultFilter"><option value="">All</option></select></label>
+                <label for="benchmarkGroupFilter">Sensor group<select id="benchmarkGroupFilter"><option value="">All</option></select></label>
+                <label for="benchmarkChannelsFilter">Affected channels<select id="benchmarkChannelsFilter"><option value="">All</option></select></label>
+            </div>
+            <h3>Coverage / normalized error by affected-channel count</h3>
+            <div id="benchmarkHeatmap" class="benchmark-heatmap"></div>
+            <h3>Filtered benchmark cells</h3>
+            <div id="benchmarkTable" class="audit-table"></div>
+        </section>
+
         <section class="panel" id="stress">
             <h2>Stress test &amp; simultaneous channel failures</h2>
             <p class="muted">Counts below describe injected event sizes; they are not a controlled performance comparison by failure level.</p>
@@ -160,6 +217,8 @@
         </section>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/three.min.js?v=20261027-2255"></script>
+    <script src="/static/rig.js?v=20261027-2255"></script>
+    <script src="/static/app.js?v=20261027-2255"></script>
 </body>
 </html>

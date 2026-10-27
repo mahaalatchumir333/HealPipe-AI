@@ -303,6 +303,149 @@ progress {
     border: 1px solid rgba(255,255,255,0.03);
 }
 
+.rig-canvas {
+    width: 100%;
+    height: 390px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    background: #0b1622;
+}
+
+.rig-canvas canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+}
+
+.rig-canvas canvas.is-dragging {
+    cursor: grabbing;
+}
+
+.rig-canvas:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+}
+
+.rig-legend, .rig-sensor-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.rig-legend {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.rig-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.rig-status, .rig-fault {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.rig-status.measured { background: #7ef0b6; }
+.rig-status.estimated { background: #c49aff; }
+.rig-status.corrected { background: #ff7d7d; }
+.rig-status.unresolved { background: #ff5e67; }
+.rig-fault { border: 3px solid #ffbd69; }
+
+.rig-sensor-button {
+    display: grid;
+    min-width: 90px;
+    gap: 3px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 9px;
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rig-sensor-button.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+}
+
+.rig-sensor-button span, .rig-sensor-button small {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.rig-fallback {
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    background: #0b1622;
+}
+
+.rig-fallback[hidden] { display: none; }
+.rig-fallback svg { display: block; width: 100%; max-height: 420px; }
+.rig-flow-path {
+    stroke-dasharray: 18 12;
+    animation: rig-flow-dash 1.4s linear infinite;
+}
+.rig-marker { cursor: pointer; }
+.rig-marker:focus circle, .rig-marker.selected circle { stroke-width: 6; }
+
+.benchmark-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 14px 0;
+}
+
+.benchmark-heatmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.benchmark-heat-cell {
+    display: grid;
+    gap: 7px;
+    padding: 14px;
+    border: 1px solid hsla(var(--coverage-hue), 72%, 66%, .42);
+    border-radius: 10px;
+    background: hsla(var(--coverage-hue), 48%, 34%, .28);
+}
+
+.benchmark-heat-cell span, .benchmark-heat-cell small {
+    color: var(--muted);
+}
+
+.replay-controls {
+    display: grid;
+    grid-template-columns: auto auto minmax(180px, 1fr);
+    align-items: center;
+    gap: 16px;
+}
+
+.replay-controls progress {
+    margin: 0;
+}
+
+#replayClock {
+    color: var(--secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+@keyframes rig-flow-dash {
+    to { stroke-dashoffset: -60; }
+}
+
 .audit-table {
     overflow: auto;
 }

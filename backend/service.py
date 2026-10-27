@@ -7,12 +7,23 @@ import numpy as np
 import pandas as pd
 
 from backend.database import insert_run, list_runs
+from backend.sensor_context import (
+    annotate_coincident_events,
+    annotate_point,
+    describe_sensor,
+)
 from pipeline.calibrate import ARTIFACT, apply_calibrated_confidence, calibrate_run
 from pipeline.detect import detect_faults
 from pipeline.reconstruct import SENSORS, ensure_models, load_model_map
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "Data"
+SENSOR_GROUPS = {
+    "pressure": ["PS1", "PS2", "PS3"],
+    "flow": ["FS1", "FS2"],
+    "temperature": ["TS1", "TS2", "TS3", "TS4"],
+    "power": ["EPS1"],
+}
 
 
 def _json_records(frame: pd.DataFrame) -> list[dict]:
@@ -29,8 +40,9 @@ def _json_records(frame: pd.DataFrame) -> list[dict]:
 
     records = []
     for row in frame.to_dict(orient="records"):
-        records.append({key: json_value(value) for key, value in row.items()})
-    return records
+        record = {key: json_value(value) for key, value in row.items()}
+        records.append(annotate_point(record) if "sensor_id" in record else record)
+    return annotate_coincident_events(records)
 
 
 def load_partition_data(partition: str = "validation") -> pd.DataFrame:
@@ -56,12 +68,20 @@ def current_metrics() -> dict:
 
 
 def load_evaluation(partition: str) -> dict:
-    if partition not in {"validation", "test"}:
-        raise ValueError("partition must be 'validation' or 'test'")
-    path = ROOT / "artifacts" / "evaluation" / f"{partition}_evaluation.json"
+    if partition not in {"validation", "test", "test_v2"}:
+        raise ValueError("partition must be 'validation', 'test', or 'test_v2'")
+    report_name = "test_evaluation_v2.json" if partition == "test_v2" else f"{partition}_evaluation.json"
+    path = ROOT / "artifacts" / "evaluation" / report_name
     if not path.exists():
         raise FileNotFoundError(f"No {partition} evaluation report exists at {path}.")
     return json.loads(path.read_text())
+
+
+def load_benchmark() -> dict:
+    path = ROOT / "artifacts" / "benchmark" / "benchmark.json"
+    if not path.exists():
+        raise FileNotFoundError(f"No benchmark report exists at {path}. Run `python -m pipeline.benchmark`.")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def evaluation_series(
@@ -122,6 +142,31 @@ def evaluation_series(
     return series
 
 
+def evaluation_rig(partition: str, cycle_id: int) -> dict:
+    if partition not in {"validation", "test"}:
+        raise ValueError("partition must be 'validation' or 'test'")
+    data = load_partition_data(partition)
+    if cycle_id not in set(int(value) for value in data["cycle_id"].unique()):
+        raise ValueError(f"Unknown cycle_id {cycle_id} for the {partition} partition.")
+    cycle = data[data["cycle_id"] == cycle_id].sort_values("second_in_cycle")
+    results = apply_calibrated_confidence(detect_faults(cycle, load_model_map()))
+    sensor_points = {
+        sensor: _json_records(results[results["sensor_id"] == sensor].sort_values("second_in_cycle"))
+        for sensor in SENSORS
+    }
+    return {
+        "partition": partition,
+        "cycle_id": int(cycle_id),
+        "sensor_map": load_sensor_map(),
+        "sensors": sensor_points,
+    }
+
+
+def load_sensor_map() -> dict:
+    sensor_map_path = ROOT / "artifacts" / "sensor_map.json"
+    return json.loads(sensor_map_path.read_text(encoding="utf-8"))
+
+
 def evaluate_scenario(
     partition: str,
     sensor: str,
@@ -131,6 +176,7 @@ def evaluate_scenario(
     duration_seconds: int,
     severity: float,
     affected_channels: int,
+    sensor_group: str | None = None,
 ) -> dict:
     if partition not in {"validation", "test"}:
         raise ValueError("partition must be 'validation' or 'test'")
@@ -147,8 +193,8 @@ def evaluate_scenario(
     actual_duration = 1 if fault_type == "spike" else duration_seconds
     if start_second + actual_duration > 60:
         raise ValueError("The fault duration must fit within the selected 60-second cycle.")
-    if fault_type == "freeze" and not 3 <= duration_seconds <= 10:
-        raise ValueError("Freeze duration must be between 3 and 10 seconds.")
+    if fault_type == "freeze" and duration_seconds not in {1, 3, 5, 10}:
+        raise ValueError("Freeze duration must be 1, 3, 5, or 10 seconds.")
     if fault_type == "drift" and not 10 <= duration_seconds <= 30:
         raise ValueError("Drift duration must be between 10 and 30 seconds.")
     if fault_type in {"spike", "drift"} and not 3 <= severity <= 12:
@@ -169,11 +215,27 @@ def evaluate_scenario(
     if len(clean_cycle) != 60 or clean_cycle["second_in_cycle"].tolist() != list(range(60)):
         raise ValueError(f"Cycle {cycle_id} does not contain a complete 60-second grid.")
 
-    sensor_index = SENSORS.index(sensor)
-    target_sensors = [
-        SENSORS[(sensor_index + offset) % len(SENSORS)]
-        for offset in range(affected_channels)
-    ]
+    if sensor_group is None:
+        sensor_index = SENSORS.index(sensor)
+        target_sensors = [
+            SENSORS[(sensor_index + offset) % len(SENSORS)]
+            for offset in range(affected_channels)
+        ]
+    else:
+        group_sensors = SENSOR_GROUPS.get(sensor_group)
+        if group_sensors is None:
+            raise ValueError(f"Unknown sensor group: {sensor_group}")
+        if sensor not in group_sensors:
+            raise ValueError(f"Sensor {sensor} is not in the {sensor_group} group.")
+        if affected_channels > len(group_sensors):
+            raise ValueError(
+                f"The {sensor_group} group has only {len(group_sensors)} supported channels."
+            )
+        sensor_index = group_sensors.index(sensor)
+        target_sensors = [
+            group_sensors[(sensor_index + offset) % len(group_sensors)]
+            for offset in range(affected_channels)
+        ]
     scales_path = ROOT / "artifacts" / "reference_scales.json"
     scales = json.loads(scales_path.read_text())
     corrupted = clean_cycle[["cycle_id", "second_in_cycle", *SENSORS]].copy()
@@ -220,6 +282,22 @@ def evaluate_scenario(
             - reference_values
         ) <= tolerance.loc[sensor_mask].to_numpy(dtype=float)
     accepted_success &= accepted
+    predicted_fault_class_points = int(results["fault_type"].eq(fault_type).sum())
+    unresolved_fault_points = int(target_results["status"].eq("Unresolved").sum())
+    accepted_normalized_errors = []
+    for target_sensor in target_sensors:
+        sensor_mask = accepted & target_results["sensor_id"].eq(target_sensor)
+        if not sensor_mask.any():
+            continue
+        seconds = target_results.loc[sensor_mask, "second_in_cycle"].to_numpy(dtype=int)
+        reference_values = reference_by_second.loc[seconds, target_sensor].to_numpy(dtype=float)
+        reconstructed_values = target_results.loc[
+            sensor_mask, "reconstructed_value"
+        ].to_numpy(dtype=float)
+        scale = max(float(scales.get(target_sensor, 1.0)), 1e-8)
+        accepted_normalized_errors.extend(
+            (np.abs(reconstructed_values - reference_values) / scale).tolist()
+        )
     predicted_faults = results["fault_type"].ne("healthy")
     false_alarms = int((~target_mask & predicted_faults).sum())
     true_positive_count = int(correct_diagnoses.sum())
@@ -242,23 +320,34 @@ def evaluate_scenario(
             "duration_seconds": actual_duration,
             "severity_sensor_scales": severity if fault_type in {"spike", "drift"} else None,
             "sensors": target_sensors,
+            "sensor_group": sensor_group,
             "deterministic": True,
             "reference_values_sent_to_detector": False,
+            "sensor_context": {
+                target_sensor: describe_sensor(target_sensor, int(cycle_id))
+                for target_sensor in target_sensors
+            },
         },
         "metrics": {
             "injected_points": total_fault_points,
             "diagnosed_fault_points": int(any_diagnoses.sum()),
             "correctly_diagnosed_points": true_positive_count,
+            "predicted_fault_class_points": predicted_fault_class_points,
             "diagnosis_precision": round(precision * 100, 2),
             "diagnosis_recall": round(recall * 100, 2),
             "diagnosis_f1": round(f1 * 100, 2),
             "accepted_repairs": int(accepted.sum()),
+            "unresolved_fault_points": unresolved_fault_points,
             "refused_repairs": int(refused.sum()),
             "mean_accepted_confidence": (
                 round(float(target_results.loc[accepted, "confidence"].mean()), 2)
                 if accepted.any() else None
             ),
             "accepted_repairs_within_tolerance": int(accepted_success.sum()),
+            "normalized_repair_error": (
+                float(np.mean(accepted_normalized_errors))
+                if accepted_normalized_errors else None
+            ),
             "accepted_repair_success_rate": (
                 round(float(accepted_success.sum() / accepted.sum() * 100), 2)
                 if accepted.any() else None
@@ -370,7 +459,7 @@ def create_run_record(
     return run
 
 
-def create_upload_run(name: str, frame: pd.DataFrame, owner_id: int) -> dict:
+def create_upload_run(name: str, frame: pd.DataFrame, owner_id: int | None) -> dict:
     run = generate_run(name, "upload", frame, owner_id)
     run_id = insert_run(
         name,

@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from project_paths import root_data_dir
+from pipeline.sensor_schema import load_repair_channels
 
 ROOT = Path(__file__).resolve().parent
 DATA = root_data_dir()
@@ -30,7 +31,7 @@ ART = ROOT / "artifacts"
 OUT.mkdir(parents=True, exist_ok=True)
 ART.mkdir(parents=True, exist_ok=True)
 
-SENSORS = ["PS1", "PS2", "PS3", "FS1", "FS2", "TS1", "TS2", "TS3", "TS4", "EPS1"]
+SENSORS = list(load_repair_channels())
 SECS = 60
 INJECTOR_VERSION = "v1"
 
@@ -61,7 +62,7 @@ def compute_scales():
     return scales
 
 
-def inject(partition, seed):
+def inject(partition, seed, output_name=None):
     rng = np.random.default_rng(seed)
     scales = compute_scales()
     ref = pd.read_parquet(SPLITS / f"{partition}_reference.parquet")
@@ -141,15 +142,16 @@ def inject(partition, seed):
     ]
     lab = lab[public_label_columns + private_metadata_columns].copy()
 
-    corrupted_path = OUT / f"{partition}_corrupted.parquet"
-    labels_path = OUT / f"{partition}_labels_private.parquet"
+    output_name = output_name or partition
+    corrupted_path = OUT / f"{output_name}_corrupted.parquet"
+    labels_path = OUT / f"{output_name}_labels_private.parquet"
     corrupted.to_parquet(corrupted_path, index=False)
     lab.to_parquet(labels_path, index=False)
 
-    if partition == "test":
+    if partition == "test" and output_name == "test":
         corrupted.to_parquet(OUT / "test_corrupted.parquet", index=False)
         lab.to_parquet(OUT / "st_labels_private.parquet", index=False)
-    elif partition == "validation":
+    elif partition == "validation" and output_name == "validation":
         corrupted.to_parquet(OUT / "validation_corrupted.parquet", index=False)
         lab.to_parquet(OUT / "validation_labels_private.parquet", index=False)
 
@@ -162,7 +164,7 @@ def inject(partition, seed):
         "points_by_fault": lab["injected_fault"].value_counts().to_dict(),
         "total_sensor_points": int(len(ref) * len(SENSORS)),
     }
-    (OUT / f"{partition}_injection_manifest.json").write_text(json.dumps(manifest, indent=2))
+    (OUT / f"{output_name}_injection_manifest.json").write_text(json.dumps(manifest, indent=2))
     print(f"[{partition}] seed={seed}  events={event_id}  injected points={len(lab)} "
           f"of {manifest['total_sensor_points']}")
     print("   by fault:", manifest["points_by_fault"])
@@ -172,5 +174,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--partition", choices=["validation", "test"], required=True)
     ap.add_argument("--seed", type=int, required=True)
+    ap.add_argument(
+        "--output-name",
+        default=None,
+        help="Output file prefix; use test_v2 to preserve the existing test files.",
+    )
     a = ap.parse_args()
-    inject(a.partition, a.seed)
+    inject(a.partition, a.seed, a.output_name)

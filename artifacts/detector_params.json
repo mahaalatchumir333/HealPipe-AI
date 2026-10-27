@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "version": "2026-10-validation-1",
+  "tuning_partition": "validation",
+  "parameters": {
+    "freeze_windows": [
+      3,
+      5,
+      10
+    ],
+    "freeze_tolerance_scale": 0.015,
+    "freeze_motion_scale": 0.75,
+    "freeze_disagreement_scale": 1.5,
+    "spike_score_threshold": 6.0,
+    "spike_residual_scale": 3.0,
+    "drift_window": 10,
+    "drift_slope_scale": 0.08,
+    "drift_change_scale": 0.9,
+    "drift_residual_scale": 1.0,
+    "drift_r_squared": 0.85
+  },
+  "validation_scores": {
+    "per_fault": {
+      "missing": {
+        "support": 961,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "freeze": {
+        "support": 688,
+        "precision": 0.19365609348914858,
+        "recall": 0.3372093023255814,
+        "f1": 0.24602332979851538
+      },
+      "spike": {
+        "support": 159,
+        "precision": 0.11286089238845144,
+        "recall": 0.8113207547169812,
+        "f1": 0.19815668202764977
+      },
+      "drift": {
+        "support": 3630,
+        "precision": 0.6545496113397348,
+        "recall": 0.7887052341597797,
+        "f1": 0.715392303848076
+      }
+    },
+    "untouched_cycles": {
+      "count": 157,
+      "cycles_with_any_false_alarm": 108,
+      "false_positive_cycle_rate": 0.6878980891719745
+    },
+    "point_false_positive_rate": 0.013362298485117417,
+    "by_fault_duration_severity": [
+      {
+        "fault_type": "drift",
+        "duration_seconds": 10,
+        "severity_sensor_scales": 3.0,
+        "support": 180,
+        "precision": 1.0,
+        "recall": 0.8277777777777777,
+        "f1": 0.9057750759878419
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 10,
+        "severity_sensor_scales": 6.0,
+        "support": 190,
+        "precision": 1.0,
+        "recall": 0.8421052631578947,
+        "f1": 0.9142857142857143
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 10,
+        "severity_sensor_scales": 10.0,
+        "support": 260,
+        "precision": 1.0,
+        "recall": 0.9884615384615385,
+        "f1": 0.9941972920696325
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 20,
+        "severity_sensor_scales": 3.0,
+        "support": 380,
+        "precision": 1.0,
+        "recall": 0.7315789473684211,
+        "f1": 0.844984802431611
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 20,
+        "severity_sensor_scales": 6.0,
+        "support": 440,
+        "precision": 1.0,
+        "recall": 0.9045454545454545,
+        "f1": 0.9498806682577565
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 20,
+        "severity_sensor_scales": 10.0,
+        "support": 500,
+        "precision": 1.0,
+        "recall": 0.912,
+        "f1": 0.9539748953974896
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 30,
+        "severity_sensor_scales": 3.0,
+        "support": 720,
+        "precision": 1.0,
+        "recall": 0.5402777777777777,
+        "f1": 0.7015329125338142
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 30,
+        "severity_sensor_scales": 6.0,
+        "support": 600,
+        "precision": 1.0,
+        "recall": 0.73,
+        "f1": 0.8439306358381503
+      },
+      {
+        "fault_type": "drift",
+        "duration_seconds": 30,
+        "severity_sensor_scales": 10.0,
+        "support": 360,
+        "precision": 1.0,
+        "recall": 0.9388888888888889,
+        "f1": 0.9684813753581661
+      },
+      {
+        "fault_type": "freeze",
+        "duration_seconds": 3,
+        "severity_sensor_scales": null,
+        "support": 93,
+        "precision": 1.0,
+        "recall": 0.03225806451612903,
+        "f1": 0.0625
+      },
+      {
+        "fault_type": "freeze",
+        "duration_seconds": 5,
+        "severity_sensor_scales": null,
+        "support": 215,
+        "precision": 1.0,
+        "recall": 0.35348837209302325,
+        "f1": 0.5223367697594501
+      },
+      {
+        "fault_type": "freeze",
+        "duration_seconds": 10,
+        "severity_sensor_scales": null,
+        "support": 380,
+        "precision": 1.0,
+        "recall": 0.4026315789473684,
+        "f1": 0.574108818011257
+      },
+      {
+        "fault_type": "missing",
+        "duration_seconds": 1,
+        "severity_sensor_scales": null,
+        "support": 50,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "fault_type": "missing",
+        "duration_seconds": 3,
+        "severity_sensor_scales": null,
+        "support": 96,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "fault_type": "missing",
+        "duration_seconds": 5,
+        "severity_sensor_scales": null,
+        "support": 245,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "fault_type": "missing",
+        "duration_seconds": 10,
+        "severity_sensor_scales": null,
+        "support": 570,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "fault_type": "spike",
+        "duration_seconds": 1,
+        "severity_sensor_scales": 3.0,
+        "support": 35,
+        "precision": 1.0,
+        "recall": 0.5142857142857142,
+        "f1": 0.6792452830188679
+      },
+      {
+        "fault_type": "spike",
+        "duration_seconds": 1,
+        "severity_sensor_scales": 5.0,
+        "support": 42,
+        "precision": 1.0,
+        "recall": 0.8095238095238095,
+        "f1": 0.8947368421052632
+      },
+      {
+        "fault_type": "spike",
+        "duration_seconds": 1,
+        "severity_sensor_scales": 8.0,
+        "support": 46,
+        "precision": 1.0,
+        "recall": 0.9347826086956522,
+        "f1": 0.9662921348314606
+      },
+      {
+        "fault_type": "spike",
+        "duration_seconds": 1,
+        "severity_sensor_scales": 12.0,
+        "support": 36,
+        "precision": 1.0,
+        "recall": 0.9444444444444444,
+        "f1": 0.9714285714285714
+      }
+    ],
+    "inherently_undetectable": [
+      {
+        "case": "one-second freeze",
+        "validation_examples": 0,
+        "reason": "A single frozen sample has no within-run repetition; it cannot be distinguished from a legitimate measurement without independent evidence. This case is reported, not tuned."
+      }
+    ]
+  }
+}

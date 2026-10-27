@@ -10,7 +10,31 @@ from pipeline.reconstruct import SENSORS, feature_matrix
 
 ROOT = Path(__file__).resolve().parent.parent
 SCALE_PATH = ROOT / "artifacts" / "reference_scales.json"
+PARAMS_PATH = ROOT / "artifacts" / "detector_params.json"
 MIN_REPAIR_CONFIDENCE = 50.0
+
+
+def _detector_params() -> dict:
+    defaults = {
+        "freeze_windows": [3, 5, 10],
+        "freeze_tolerance_scale": 0.015,
+        "freeze_motion_scale": 0.75,
+        "freeze_disagreement_scale": 1.5,
+        "spike_score_threshold": 6.0,
+        "spike_residual_scale": 3.0,
+        "drift_window": 10,
+        "drift_slope_scale": 0.12,
+        "drift_change_scale": 0.75,
+        "drift_residual_scale": 1.0,
+        "drift_r_squared": 0.85,
+    }
+    if not PARAMS_PATH.exists():
+        return defaults
+    with PARAMS_PATH.open(encoding="utf-8") as file:
+        params = json.load(file)
+    if params.get("schema_version") != 1 or not isinstance(params.get("parameters"), dict):
+        raise ValueError(f"Unsupported detector parameter file: {PARAMS_PATH}")
+    return {**defaults, **params["parameters"]}
 
 
 def _sensor_scales() -> dict[str, float]:
@@ -19,10 +43,15 @@ def _sensor_scales() -> dict[str, float]:
     return {sensor: 1.0 for sensor in SENSORS}
 
 
-def _freeze_candidate(values: np.ndarray, predictions: np.ndarray, scales: dict[str, float]) -> np.ndarray:
+def _freeze_candidate(
+    values: np.ndarray,
+    predictions: np.ndarray,
+    scales: dict[str, float],
+    windows: tuple[int, ...] = (3, 5, 10),
+) -> np.ndarray:
     flags = np.zeros(len(values), dtype=bool)
     for idx in range(len(values)):
-        for window in (3, 5, 10):
+        for window in windows:
             start = idx - window + 1
             if start < 0:
                 continue
@@ -56,15 +85,21 @@ def _spike_scores(values: np.ndarray, scale: float) -> np.ndarray:
     return scores
 
 
-def _drift_flags(residuals: np.ndarray, scale: float) -> np.ndarray:
+def _drift_flags(residuals: np.ndarray, scale: float, params: dict | None = None) -> np.ndarray:
+    params = params or {}
+    window = int(params.get("drift_window", 10))
+    slope_threshold = float(params.get("drift_slope_scale", 0.12))
+    change_threshold = float(params.get("drift_change_scale", 0.75))
+    residual_threshold = float(params.get("drift_residual_scale", 1.0))
+    r_squared_threshold = float(params.get("drift_r_squared", 0.85))
     flags = np.zeros(len(residuals), dtype=bool)
     for idx in range(len(residuals)):
-        start = idx - 9
+        start = idx - window + 1
         if start < 0:
             continue
         chunk = residuals[start:idx + 1]
         finite = np.isfinite(chunk)
-        if finite.sum() < 9:
+        if finite.sum() < window - 1:
             continue
         chunk = chunk[finite]
         x = np.arange(len(chunk), dtype=float)
@@ -74,10 +109,10 @@ def _drift_flags(residuals: np.ndarray, scale: float) -> np.ndarray:
         r_squared = 1.0 - float(np.sum((chunk - fitted) ** 2)) / variance if variance > 0 else 0.0
         residual_magnitude = abs(float(chunk[-1])) / scale
         if (
-            abs(float(slope)) >= 0.12 * scale
-            and abs(float(chunk[-1] - chunk[0])) >= 0.75 * scale
-            and residual_magnitude >= 1.0
-            and r_squared >= 0.85
+            abs(float(slope)) >= slope_threshold * scale
+            and abs(float(chunk[-1] - chunk[0])) >= change_threshold * scale
+            and residual_magnitude >= residual_threshold
+            and r_squared >= r_squared_threshold
         ):
             flags[start:idx + 1] = True
     return flags
@@ -103,6 +138,7 @@ def detect_faults(frame: pd.DataFrame, models: dict[str, object]) -> pd.DataFram
         raise ValueError(f"Telemetry frame is missing required columns: {sorted(missing_columns)}")
 
     scales = _sensor_scales()
+    params = _detector_params()
     rows: list[dict] = []
 
     ordered = frame.sort_values(["cycle_id", "second_in_cycle"], kind="stable").reset_index(drop=True)
@@ -128,15 +164,16 @@ def detect_faults(frame: pd.DataFrame, models: dict[str, object]) -> pd.DataFram
             fault_types[missing] = "missing"
             evidence[missing] = 10.0
 
-            freeze_tolerance = max(scale * 0.015, 1e-8)
+            freeze_tolerance = max(scale * float(params["freeze_tolerance_scale"]), 1e-8)
             freeze_flags = _freeze_candidate(
                 values,
                 predictions,
                 {
                     "freeze_tolerance": freeze_tolerance,
-                    "motion_tolerance": max(scale * 0.75, 1e-8),
-                    "disagreement_tolerance": max(scale * 1.5, 1e-8),
+                    "motion_tolerance": max(scale * float(params["freeze_motion_scale"]), 1e-8),
+                    "disagreement_tolerance": max(scale * float(params["freeze_disagreement_scale"]), 1e-8),
                 },
+                tuple(int(window) for window in params["freeze_windows"]),
             )
             freeze_flags &= fault_types == "healthy"
             fault_types[freeze_flags] = "freeze"
@@ -147,14 +184,14 @@ def detect_faults(frame: pd.DataFrame, models: dict[str, object]) -> pd.DataFram
 
             spike_scores = _spike_scores(values, scale)
             spike_flags = (
-                (spike_scores > 6.0)
-                & (np.abs(residuals) >= 3.0 * scale)
+                (spike_scores > float(params["spike_score_threshold"]))
+                & (np.abs(residuals) >= float(params["spike_residual_scale"]) * scale)
                 & (fault_types == "healthy")
             )
             fault_types[spike_flags] = "spike"
             evidence[spike_flags] = spike_scores[spike_flags]
 
-            drift_flags = _drift_flags(residuals, scale) & (fault_types == "healthy")
+            drift_flags = _drift_flags(residuals, scale, params) & (fault_types == "healthy")
             fault_types[drift_flags] = "drift"
             evidence[drift_flags] = np.abs(residuals[drift_flags]) / scale
 

@@ -1,0 +1,26 @@
+{
+  "source": [
+    "Data/raw/documentation.txt",
+    "Data/raw/description.txt"
+  ],
+  "location_policy": "Dataset documentation describes sensor types and the hydraulic system circuits but does not document individual sensor locations. No physical sensor positions are inferred.",
+  "sensors": {
+    "PS1": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "PS2": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "PS3": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "PS4": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "PS5": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "PS6": {"sensor_type": "pressure", "unit": "bar", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "FS1": {"sensor_type": "volume flow", "unit": "l/min", "sampling_rate_hz": 10, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "FS2": {"sensor_type": "volume flow", "unit": "l/min", "sampling_rate_hz": 10, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "TS1": {"sensor_type": "temperature", "unit": "°C", "sampling_rate_hz": 1, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "TS2": {"sensor_type": "temperature", "unit": "°C", "sampling_rate_hz": 1, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "TS3": {"sensor_type": "temperature", "unit": "°C", "sampling_rate_hz": 1, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "TS4": {"sensor_type": "temperature", "unit": "°C", "sampling_rate_hz": 1, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "EPS1": {"sensor_type": "motor power", "unit": "W", "sampling_rate_hz": 100, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "VS1": {"sensor_type": "vibration", "unit": "mm/s", "sampling_rate_hz": 1, "hydraulic_circuit": "not documented", "location_area": "not documented", "documented_location_note": "Individual sensor location is not documented."},
+    "CE": {"sensor_type": "virtual cooling efficiency", "unit": "%", "sampling_rate_hz": 1, "hydraulic_circuit": "virtual/derived", "location_area": "not applicable", "documented_location_note": "Derived virtual sensor; not a physical sensor location."},
+    "CP": {"sensor_type": "virtual cooling power", "unit": "kW", "sampling_rate_hz": 1, "hydraulic_circuit": "virtual/derived", "location_area": "not applicable", "documented_location_note": "Derived virtual sensor; not a physical sensor location."},
+    "SE": {"sensor_type": "efficiency factor", "unit": "%", "sampling_rate_hz": 1, "hydraulic_circuit": "virtual/derived", "location_area": "not applicable", "documented_location_note": "Derived sensor; excluded from supporting inputs."}
+  }
+}

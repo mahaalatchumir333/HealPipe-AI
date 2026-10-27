@@ -1,0 +1,32 @@
+{
+  "processing_grid": "1 Hz; high-rate channels are averaged to one-second values per 60-second cycle",
+  "repair_supported_channels": ["PS1", "PS2", "PS3", "FS1", "FS2", "TS1", "TS2", "TS3", "TS4", "EPS1"],
+  "optional_channels_require_retraining": {
+    "enabled": false,
+    "channels": ["PS4", "PS5", "PS6", "VS1"],
+    "note": "Opt-in only. Existing detector and reconstruction models do not use these channels; retrain and evaluate separately before enabling."
+  },
+  "excluded_support_channels": {
+    "channels": ["CE", "CP", "SE"],
+    "note": "CE and CP are virtual/derived in dataset documentation; SE is a derived efficiency factor. None are used as model support inputs."
+  },
+  "channels": {
+    "PS1": {"file": "PS1.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": true},
+    "PS2": {"file": "PS2.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": true},
+    "PS3": {"file": "PS3.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": true},
+    "PS4": {"file": "PS4.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": false},
+    "PS5": {"file": "PS5.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": false},
+    "PS6": {"file": "PS6.txt", "sampling_rate_hz": 100, "unit": "bar", "enabled": false},
+    "FS1": {"file": "FS1.txt", "sampling_rate_hz": 10, "unit": "l/min", "enabled": true},
+    "FS2": {"file": "FS2.txt", "sampling_rate_hz": 10, "unit": "l/min", "enabled": true},
+    "TS1": {"file": "TS1.txt", "sampling_rate_hz": 1, "unit": "°C", "enabled": true},
+    "TS2": {"file": "TS2.txt", "sampling_rate_hz": 1, "unit": "°C", "enabled": true},
+    "TS3": {"file": "TS3.txt", "sampling_rate_hz": 1, "unit": "°C", "enabled": true},
+    "TS4": {"file": "TS4.txt", "sampling_rate_hz": 1, "unit": "°C", "enabled": true},
+    "EPS1": {"file": "EPS1.txt", "sampling_rate_hz": 100, "unit": "W", "enabled": true},
+    "VS1": {"file": "VS1.txt", "sampling_rate_hz": 1, "unit": "mm/s", "enabled": false},
+    "CE": {"file": "CE.txt", "sampling_rate_hz": 1, "unit": "%", "enabled": false, "derived": true},
+    "CP": {"file": "CP.txt", "sampling_rate_hz": 1, "unit": "kW", "enabled": false, "derived": true},
+    "SE": {"file": "SE.txt", "sampling_rate_hz": 1, "unit": "%", "enabled": false, "derived": true}
+  }
+}

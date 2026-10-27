@@ -19,12 +19,13 @@ RESULTS = ROOT / "artifacts" / "evaluation"
 
 def evaluate(partition: str = "test") -> dict:
     started_at = time.perf_counter()
-    if partition not in {"validation", "test"}:
-        raise ValueError("partition must be 'validation' or 'test'")
+    if partition not in {"validation", "test", "test_v2"}:
+        raise ValueError("partition must be 'validation', 'test', or 'test_v2'")
 
     ensure_models()
+    source_partition = "test" if partition == "test_v2" else partition
     corrupted = pd.read_parquet(DATA / "corrupted" / f"{partition}_corrupted.parquet")
-    reference = pd.read_parquet(DATA / "splits" / f"{partition}_reference.parquet")
+    reference = pd.read_parquet(DATA / "splits" / f"{source_partition}_reference.parquet")
     labels_path = DATA / "corrupted" / f"{partition}_labels_private.parquet"
     labels = pd.read_parquet(labels_path)
     detections = detect_faults(corrupted, load_model_map())
@@ -102,8 +103,20 @@ def evaluate(partition: str = "test") -> dict:
     )
     event_sizes = labels.groupby("event_id")["sensor_id"].nunique() if "event_id" in labels else pd.Series(dtype=int)
     modified_confidence = results.loc[results["modified"], "confidence"]
+    untouched_cycle_ids = set(reference["cycle_id"].unique()) - set(labels["cycle_id"].unique())
+    false_alarm_cycles = set(
+        results.loc[
+            results["cycle_id"].isin(untouched_cycle_ids)
+            & (results["fault_type"] != "healthy"),
+            "cycle_id",
+        ].unique()
+    )
+    healthy_points = results[results["truth"] == "healthy"]
+    unintended_diagnoses = healthy_points[healthy_points["fault_type"] != "healthy"]
+    unintended_changes = healthy_points[healthy_points["modified"]]
     result = {
         "partition": partition,
+        "source_partition": source_partition,
         "cycles": int(reference["cycle_id"].nunique()),
         "telemetry_seconds": int(len(reference)),
         "duration_seconds": round(time.perf_counter() - started_at, 3),
@@ -130,6 +143,23 @@ def evaluate(partition: str = "test") -> dict:
             ),
             "decision_scope": "Injected fault coordinates; success means error within 1.5x sensor reference scale.",
         },
+        "false_positives": {
+            "untouched_cycles": int(len(untouched_cycle_ids)),
+            "untouched_cycles_with_any_diagnosis": int(len(false_alarm_cycles)),
+            "untouched_cycle_false_positive_rate": (
+                len(false_alarm_cycles) / len(untouched_cycle_ids)
+                if untouched_cycle_ids else None
+            ),
+            "healthy_point_false_positive_rate": (
+                len(unintended_diagnoses) / len(healthy_points)
+                if len(healthy_points) else None
+            ),
+        },
+        "unintended_changes": {
+            "healthy_points_diagnosed_as_fault": int(len(unintended_diagnoses)),
+            "healthy_points_modified": int(len(unintended_changes)),
+            "scope": "Points without injected faults; includes only detector diagnoses and repairs.",
+        },
         "unresolved_points": int((results["status"] == "Unresolved").sum()),
         "fault_distribution": {
             str(key): int(value)
@@ -149,7 +179,8 @@ def evaluate(partition: str = "test") -> dict:
         },
     }
     RESULTS.mkdir(parents=True, exist_ok=True)
-    (RESULTS / f"{partition}_evaluation.json").write_text(json.dumps(result, indent=2))
+    report_name = "test_evaluation_v2.json" if partition == "test_v2" else f"{partition}_evaluation.json"
+    (RESULTS / report_name).write_text(json.dumps(result, indent=2))
     return result
 
 
@@ -251,7 +282,12 @@ def _reliability_bins(fault_points: pd.DataFrame, bins: int = 10) -> list[dict]:
 
 
 if __name__ == "__main__":
-    output = evaluate()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Evaluate a fixed dataset partition once.")
+    parser.add_argument("--partition", choices=["validation", "test", "test_v2"], default="test")
+    args = parser.parse_args()
+    output = evaluate(args.partition)
     print(json.dumps({
         key: output[key]
         for key in ("partition", "points", "injected_points", "detected_points", "modified_points", "repair_mae")

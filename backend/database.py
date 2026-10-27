@@ -218,11 +218,11 @@ def update_job(job_id: str, status: str, run_id: int | None = None, error: str |
         conn.close()
 
 
-def get_job(job_id: str, owner_id: int) -> dict[str, Any] | None:
+def get_job(job_id: str, owner_id: int | None) -> dict[str, Any] | None:
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, owner_id, status, upload_path, run_id, error, created_at, updated_at FROM jobs WHERE id = ? AND owner_id = ?",
+            "SELECT id, owner_id, status, upload_path, run_id, error, created_at, updated_at FROM jobs WHERE id = ? AND owner_id IS ?",
             (job_id, owner_id),
         ).fetchone()
         return dict(row) if row else None

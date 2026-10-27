@@ -1,5 +1,8 @@
 let activePoints = [];
 let activeRunId = null;
+let activeRigData = null;
+let benchmarkReport = null;
+let activeReplay = null;
 
 async function getJson(url) {
     const token = localStorage.getItem('healpipeToken');
@@ -172,6 +175,7 @@ function renderChart(series) {
             inspectPoint(Number(marker.dataset.pointIndex));
         }
     };
+    window.renderSensorRig?.(activeRigData, series.sensor);
 }
 
 function renderSummary(run) {
@@ -227,6 +231,7 @@ function renderScenarioResult(result) {
     const auditRows = (result.fault_audit || []).map(point => `
         <tr>
             <td>${escapeHtml(point.sensor_id)}</td>
+            <td>${escapeHtml(point.location_area || 'not documented')}</td>
             <td>${escapeHtml(point.second_in_cycle)}</td>
             <td>${escapeHtml(point.fault_type)}</td>
             <td>${escapeHtml(point.status)}</td>
@@ -235,8 +240,18 @@ function renderScenarioResult(result) {
             <td>${escapeHtml(point.observed_value ?? 'missing')}</td>
             <td>${escapeHtml(point.reconstructed_value ?? 'withheld')}</td>
             <td>${escapeHtml(point.diagnosis)}</td>
+            <td>${escapeHtml(point.process_event_warning || '')}</td>
         </tr>
     `).join('');
+    const sensorContext = scenario.sensor_context || {};
+    const locationContext = scenario.sensors.map(sensor => {
+        const context = sensorContext[sensor] || {};
+        const condition = context.component_context;
+        const conditionText = condition
+            ? `Documented cycle condition (context only): cooler ${condition.cooler}, valve ${condition.valve}, pump ${condition.pump}, accumulator ${condition.accumulator}.`
+            : 'No cycle condition context available.';
+        return `<li><strong>${escapeHtml(sensor)}</strong> — area ${escapeHtml(context.location_area || 'not documented')}. ${escapeHtml(conditionText)}</li>`;
+    }).join('');
     target.innerHTML = `
         <p><strong>${escapeHtml(scenario.fault_type)}</strong> on ${escapeHtml(scenario.sensors.join(', '))},
             cycle ${escapeHtml(scenario.cycle_id)}, second ${escapeHtml(scenario.start_second)},
@@ -247,9 +262,11 @@ function renderScenarioResult(result) {
             <div class="stat-box"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong></div>
         `).join('')}</div>
         <p class="muted">${escapeHtml(metrics.tolerance_definition)} False alarms count diagnoses outside the injected sensor/time region.</p>
+        <p><strong>Location/context:</strong> The data fault is located at the sensor(s) listed below; this is a signal-quality finding, not a diagnosis of a failed component.</p>
+        <ul>${locationContext}</ul>
         <div class="audit-table"><table><thead><tr>
-            <th>Sensor</th><th>Second</th><th>Diagnosis</th><th>Status</th><th>Decision</th>
-            <th>Confidence</th><th>Observed</th><th>Output</th><th>Reason</th>
+            <th>Sensor</th><th>Area</th><th>Second</th><th>Diagnosis</th><th>Status</th><th>Decision</th>
+            <th>Confidence</th><th>Observed</th><th>Output</th><th>Reason</th><th>Process context</th>
         </tr></thead><tbody>${auditRows}</tbody></table></div>
     `;
 }
@@ -281,7 +298,21 @@ async function runFaultScenario() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || `Scenario failed: ${response.status}`);
         renderScenarioResult(data);
+        if (activeRigData?.sensors) {
+            activeRigData = {
+                ...activeRigData,
+                sensors: {
+                    ...activeRigData.sensors,
+                    [data.series.sensor]: data.series.points,
+                },
+            };
+        }
         activeRunId = null;
+        const scenarioDownload = document.getElementById('downloadScenarioButton');
+        if (scenarioDownload) {
+            scenarioDownload.disabled = !data.run_id;
+            scenarioDownload.dataset.runId = String(data.run_id || '');
+        }
         renderSummary({
             name: `${data.scenario.fault_type} scenario`,
             metrics: {
@@ -323,6 +354,9 @@ function inspectPoint(index) {
             <div class="stat-box"><label>Diagnosis / confidence</label><strong>${escapeHtml(point.fault_type)} / ${Number(point.confidence).toFixed(1)}%</strong></div>
             <div class="stat-box"><label>Decision</label><strong>${escapeHtml(point.acceptance_decision || 'not recorded')}</strong></div>
         </div>
+        <p><strong>Location finding:</strong> ${escapeHtml(point.location_statement || `data fault located at sensor ${point.sensor_id} (area ${point.location_area || 'not documented'}); this is a signal-quality finding, not a diagnosis of a failed component`)}</p>
+        ${point.process_event_warning ? `<p role="status"><strong>${escapeHtml(point.process_event_warning)}</strong></p>` : ''}
+        ${point.component_context ? `<p><strong>Documented component condition (context only):</strong> cooler ${escapeHtml(point.component_context.cooler)}, valve ${escapeHtml(point.component_context.valve)}, pump ${escapeHtml(point.component_context.pump)}, accumulator ${escapeHtml(point.component_context.accumulator)}. This cycle profile is context only, not a fault diagnosis.</p>` : '<p class="muted">Documented component condition is unavailable for this point.</p>'}
         <p><strong>Decision rationale:</strong> ${escapeHtml(point.decision_reason || 'Decision metadata unavailable.')}</p>
         <p><strong>Confidence scoring:</strong> ${escapeHtml(point.confidence_method || 'scoring method unavailable')}</p>
         <p><strong>Method:</strong> ${escapeHtml(point.repair_method || 'measured_input')}</p>
@@ -500,6 +534,172 @@ function renderReliability(bins) {
     `;
 }
 
+function initializeBenchmarkFilters(report) {
+    const filterValues = {
+        benchmarkFaultFilter: [...new Set((report.cells || []).map(cell => cell.fault_type))].sort(),
+        benchmarkGroupFilter: [...new Set((report.cells || []).map(cell => cell.sensor_group))].sort(),
+        benchmarkChannelsFilter: [...new Set((report.cells || []).map(cell => cell.affected_channels))].sort((a, b) => a - b),
+    };
+    Object.entries(filterValues).forEach(([id, values]) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const selected = select.value;
+        select.innerHTML = `<option value="">All</option>${values.map(value =>
+            `<option value="${escapeHtml(value)}">${escapeHtml(value)}${id === 'benchmarkChannelsFilter' ? ' channel(s)' : ''}</option>`
+        ).join('')}`;
+        select.value = selected;
+        select.addEventListener('change', () => renderBenchmark(report));
+    });
+}
+
+function renderBenchmark(report = benchmarkReport) {
+    const status = document.getElementById('benchmarkStatus');
+    const table = document.getElementById('benchmarkTable');
+    const heatmap = document.getElementById('benchmarkHeatmap');
+    if (!report || !table || !heatmap) return;
+    const fault = document.getElementById('benchmarkFaultFilter')?.value || '';
+    const group = document.getElementById('benchmarkGroupFilter')?.value || '';
+    const channels = document.getElementById('benchmarkChannelsFilter')?.value || '';
+    const cells = (report.cells || []).filter(cell => (
+        (!fault || cell.fault_type === fault)
+        && (!group || cell.sensor_group === group)
+        && (!channels || String(cell.affected_channels) === channels)
+    ));
+    if (status) {
+        status.textContent = `Generated on ${escapeHtml(report.partition)} data: ${cells.length} visible of ${report.cells?.length || 0} cells, ${report.repeats || 0} repeats per cell, seed ${report.seed ?? '—'}. ${report.truncated ? 'This report is a bounded pilot, not the full grid.' : 'Full available grid.'}`;
+    }
+
+    const byChannel = new Map();
+    cells.forEach(cell => {
+        const count = Number(cell.affected_channels);
+        if (!byChannel.has(count)) byChannel.set(count, []);
+        byChannel.get(count).push(cell);
+    });
+    const channelRows = [...byChannel.entries()].sort((a, b) => a[0] - b[0]).map(([count, rows]) => {
+        const coverageValues = rows.map(row => Number(row.accepted_repair_coverage)).filter(Number.isFinite);
+        const errorValues = rows.map(row => Number(row.normalized_error)).filter(Number.isFinite);
+        const coverage = coverageValues.length ? coverageValues.reduce((sum, value) => sum + value, 0) / coverageValues.length : null;
+        const error = errorValues.length ? errorValues.reduce((sum, value) => sum + value, 0) / errorValues.length : null;
+        const hue = coverage === null ? 210 : Math.round(coverage * 120);
+        return `<div class="benchmark-heat-cell" style="--coverage-hue:${hue}">
+            <strong>${count} channel${count === 1 ? '' : 's'}</strong>
+            <span>Accepted coverage: ${coverage === null ? '—' : `${(coverage * 100).toFixed(1)}%`}</span>
+            <span>Normalized error: ${error === null ? '—' : error.toFixed(3)}</span>
+            <small>${rows.length} cells</small>
+        </div>`;
+    }).join('');
+    heatmap.innerHTML = channelRows || '<p class="muted">No benchmark cells match these filters.</p>';
+
+    if (!cells.length) {
+        table.innerHTML = '<p class="muted">No benchmark cells match these filters.</p>';
+        return;
+    }
+    const rows = cells.map(cell => `<tr>
+        <td>${escapeHtml(cell.fault_type)}</td><td>${escapeHtml(cell.sensor_group)}</td>
+        <td>${escapeHtml(cell.affected_channels)}</td><td>${escapeHtml(cell.duration_seconds)}s</td>
+        <td>${cell.severity === null || cell.severity === undefined ? '—' : escapeHtml(cell.severity)}</td>
+        <td>${(Number(cell.precision) * 100).toFixed(1)}%</td>
+        <td>${(Number(cell.recall) * 100).toFixed(1)}%</td>
+        <td>${(Number(cell.accepted_repair_coverage) * 100).toFixed(1)}%</td>
+        <td>${(Number(cell.unresolved_rate) * 100).toFixed(1)}%</td>
+        <td>${cell.normalized_error === null || cell.normalized_error === undefined ? '—' : Number(cell.normalized_error).toFixed(3)}</td>
+        <td>${(Number(cell.within_tolerance_rate) * 100).toFixed(1)}%</td>
+        <td>${cell.mean_confidence === null || cell.mean_confidence === undefined ? '—' : Number(cell.mean_confidence).toFixed(1)}</td>
+        <td>${escapeHtml(cell.repeats)}</td>
+    </tr>`).join('');
+    table.innerHTML = `<table><thead><tr>
+        <th>Fault</th><th>Sensor group</th><th>Channels</th><th>Duration</th><th>Severity</th>
+        <th>Precision</th><th>Recall</th><th>Accepted coverage</th><th>Unresolved</th>
+        <th>Normalized error</th><th>Within tolerance</th><th>Mean confidence</th><th>Repeats</th>
+        </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function loadBenchmark() {
+    const status = document.getElementById('benchmarkStatus');
+    if (!status) return;
+    try {
+        benchmarkReport = await getJson('/api/benchmark');
+        initializeBenchmarkFilters(benchmarkReport);
+        renderBenchmark(benchmarkReport);
+    } catch (error) {
+        status.textContent = `Benchmark report unavailable: ${error.message}`;
+    }
+}
+
+function startTelemetryReplay() {
+    const button = document.getElementById('replayStartButton');
+    const clock = document.getElementById('replayClock');
+    const progress = document.getElementById('replayProgress');
+    const status = document.getElementById('replayStatus');
+    const partition = document.getElementById('evaluationPartition')?.value || 'test';
+    const sensor = document.getElementById('sensorSelect')?.value || 'PS1';
+    const cycle = document.getElementById('cycleSelect')?.value;
+    if (!button || !clock || !progress || !status) return;
+    if (!cycle) {
+        status.textContent = 'Select a complete 60-second cycle before starting the recorded replay.';
+        return;
+    }
+    activeReplay?.close();
+    const samples = [];
+    progress.value = 0;
+    clock.textContent = 'SIMULATED 00:00';
+    status.textContent = 'Streaming recorded one-second averages; repairs remain pending until the full cycle completes.';
+    button.disabled = true;
+    const params = new URLSearchParams({
+        partition,
+        sensor_id: sensor,
+        cycle_id: cycle,
+    });
+    const stream = new EventSource(`/api/telemetry/replay?${params}`);
+    activeReplay = stream;
+    stream.addEventListener('tick', event => {
+        const tick = JSON.parse(event.data);
+        samples.push(tick.samples);
+        progress.value = samples.length;
+        clock.textContent = `${tick.clock_label} ${tick.simulated_time} / 00:59`;
+        status.textContent = `Accumulated recorded second ${tick.second_in_cycle + 1} of 60. Repair status: pending until cycle completion.`;
+    });
+    stream.addEventListener('cycle_complete', event => {
+        const completed = JSON.parse(event.data);
+        const series = completed.series;
+        renderChart(series);
+        renderAuditTable(completed.audit_records);
+        renderUnresolvedPoints(series.points);
+        renderSummary({
+            name: `Recorded replay • cycle ${completed.cycle_id}`,
+            metrics: {
+                status_counts: completed.status_counts,
+                modified_count: Number(completed.status_counts.Corrected || 0)
+                    + Number(completed.status_counts.Estimated || 0),
+            },
+        });
+        if (activeRigData?.sensors) {
+            activeRigData = {
+                ...activeRigData,
+                sensors: { ...activeRigData.sensors, [completed.sensor_id]: series.points },
+            };
+        }
+        window.renderSensorRig?.(activeRigData, completed.sensor_id);
+        clock.textContent = 'SIMULATED 01:00 — cycle complete';
+        status.textContent = `${completed.repair_timing} The chart, status summary, and audit records now show the completed cycle.`;
+        const download = document.getElementById('downloadAuditButton');
+        if (download) download.disabled = true;
+    });
+    stream.addEventListener('done', () => {
+        stream.close();
+        if (activeReplay === stream) activeReplay = null;
+        button.disabled = false;
+    });
+    stream.onerror = () => {
+        if (stream.readyState === EventSource.CLOSED) {
+            status.textContent = 'Replay stream ended before completion; refresh the dashboard and try again.';
+            stream.close();
+            if (activeReplay === stream) activeReplay = null;
+            button.disabled = false;
+        }
+    };
+}
+
 async function loadOverview() {
     try {
         const metrics = await getJson('/api/summary');
@@ -545,6 +745,7 @@ async function loadDashboard() {
                 ).join('');
                 cycleSelect.value = String(series.selected_cycle ?? '');
             }
+            activeRigData = await getJson(`/runs/${run.id}/rig?cycle_id=${encodeURIComponent(series.selected_cycle)}`);
             renderChart(series);
             renderAuditTable((run.events || []).filter(event => event.sensor_id === sensor));
             renderUnresolvedPoints(series.points || []);
@@ -569,6 +770,7 @@ async function loadDashboard() {
                 ).join('');
                 cycleSelect.value = String(series.selected_cycle ?? '');
             }
+            activeRigData = await getJson(`/api/evaluation/rig?partition=${encodeURIComponent(partition)}&cycle_id=${encodeURIComponent(series.selected_cycle)}`);
             renderChart(series);
             renderAuditTable(series.points.filter(point => point.fault_type !== 'healthy'));
             renderUnresolvedPoints(series.points);
@@ -603,6 +805,67 @@ async function downloadAudit(runId) {
     URL.revokeObjectURL(url);
 }
 
+async function downloadScenarioAudit(runId) {
+    const token = localStorage.getItem('healpipeToken');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(`/api/scenarios/runs/${runId}/audit`, { headers });
+    if (!response.ok) throw new Error(`Scenario audit download failed: ${response.status}`);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `healpipe-scenario-${runId}.jsonl`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+async function initializeDemoUpload() {
+    const config = await getJson('/api/config');
+    const section = document.getElementById('demoIngestion');
+    const form = document.getElementById('demoUploadForm');
+    const status = document.getElementById('demoUploadStatus');
+    if (!config.demo_upload_enabled || !section || !form || !status) return;
+    section.hidden = false;
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const file = document.getElementById('demoTelemetryFile')?.files?.[0];
+        if (!file) return;
+        if (file.size > 25 * 1024 * 1024) {
+            status.textContent = 'File exceeds the 25 MB limit.';
+            return;
+        }
+        status.textContent = 'Uploading and validating telemetry…';
+        try {
+            const body = new FormData();
+            body.append('file', file);
+            const token = localStorage.getItem('healpipeToken');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const response = await fetch('/jobs/upload', { method: 'POST', headers, body });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || `Upload failed: ${response.status}`);
+            status.textContent = `Job ${result.job_id}: ${result.status}`;
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const job = await getJson(`/jobs/${result.job_id}`);
+                status.textContent = `Job ${result.job_id}: ${job.status}${job.error ? ` — ${job.error}` : ''}`;
+                if (job.status === 'completed' || job.status === 'failed') break;
+            }
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
+}
+
+async function initializeSensorSchema() {
+    const config = await getJson('/api/config');
+    const select = document.getElementById('sensorSelect');
+    if (!select || !Array.isArray(config.sensors)) return;
+    const selected = select.value;
+    select.innerHTML = config.sensors.map(sensor =>
+        `<option value="${escapeHtml(sensor.sensor_id)}">${escapeHtml(sensor.sensor_id)} (${escapeHtml(sensor.unit)})</option>`
+    ).join('');
+    if (config.sensors.some(sensor => sensor.sensor_id === selected)) select.value = selected;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const refreshButton = document.getElementById('refreshButton');
     const sensorSelect = document.getElementById('sensorSelect');
@@ -613,6 +876,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const scenarioDuration = document.getElementById('scenarioDuration');
     const scenarioSeverity = document.getElementById('scenarioSeverity');
     const scenarioButton = document.getElementById('runScenarioButton');
+    const scenarioDownload = document.getElementById('downloadScenarioButton');
+    const replayButton = document.getElementById('replayStartButton');
 
     const updateScenarioInputs = () => {
         if (!scenarioType || !scenarioDuration || !scenarioSeverity) return;
@@ -632,6 +897,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('chartSvg')) loadDashboard();
     else loadOverview();
+    initializeDemoUpload().catch(error => console.error('Unable to load demo upload settings:', error));
+    initializeSensorSchema().catch(error => console.error('Unable to load configured sensor schema:', error));
+    loadBenchmark();
     if (refreshButton) refreshButton.addEventListener('click', loadDashboard);
     if (sensorSelect) sensorSelect.addEventListener('change', () => {
         if (cycleSelect) cycleSelect.value = '';
@@ -648,4 +916,24 @@ document.addEventListener('DOMContentLoaded', () => {
         updateScenarioInputs();
     }
     if (scenarioButton) scenarioButton.addEventListener('click', runFaultScenario);
+    if (replayButton) replayButton.addEventListener('click', startTelemetryReplay);
+    if (scenarioDownload) scenarioDownload.addEventListener('click', async () => {
+        const runId = Number(scenarioDownload.dataset.runId);
+        if (!runId) return;
+        try {
+            await downloadScenarioAudit(runId);
+        } catch (error) {
+            const target = document.getElementById('scenarioResults');
+            if (target) target.insertAdjacentHTML('afterbegin', `<p role="alert">${escapeHtml(error.message)}</p>`);
+        }
+    });
+    document.addEventListener('healpipe:sensor-selected', event => {
+        const sensor = event.detail?.sensor;
+        const sensorSelect = document.getElementById('sensorSelect');
+        if (!sensor || !sensorSelect || !Array.from(sensorSelect.options).some(option => option.value === sensor || option.textContent === sensor)) return;
+        sensorSelect.value = sensor;
+        loadDashboard().then(() => {
+            document.getElementById('audit-inspector')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
 });
