@@ -87,6 +87,19 @@ def evaluate(partition: str = "test") -> dict:
     baselines = _baseline_metrics(fault_points, detections, corrupted)
     status_counts = results["status"].value_counts()
     reliability = _reliability_bins(fault_points)
+    accepted_faults = fault_points[fault_points["acceptance_decision"] == "accepted"]
+    refused_faults = fault_points[fault_points["acceptance_decision"] == "refused"]
+    scales_path = ROOT / "artifacts" / "reference_scales.json"
+    scales = json.loads(scales_path.read_text())
+    accepted_tolerance = accepted_faults["sensor_id"].map(
+        lambda sensor: max(float(scales.get(sensor, 1.0)), 1e-8) * 1.5
+    )
+    accepted_success_count = int(
+        (
+            (accepted_faults["reconstructed_value"] - accepted_faults["reference_value"]).abs()
+            <= accepted_tolerance
+        ).sum()
+    )
     event_sizes = labels.groupby("event_id")["sensor_id"].nunique() if "event_id" in labels else pd.Series(dtype=int)
     modified_confidence = results.loc[results["modified"], "confidence"]
     result = {
@@ -104,6 +117,19 @@ def evaluate(partition: str = "test") -> dict:
         "repair_mae": mae,
         "repair_rmse": rmse,
         "status_counts": {str(key): int(value) for key, value in status_counts.items()},
+        "decision_metrics": {
+            "accepted_repairs": int(len(accepted_faults)),
+            "refused_repairs": int(len(refused_faults)),
+            "accepted_repair_success_rate": (
+                round(accepted_success_count / len(accepted_faults) * 100, 2)
+                if len(accepted_faults) else None
+            ),
+            "fault_decision_coverage": (
+                round(len(accepted_faults) / len(fault_points) * 100, 2)
+                if len(fault_points) else 0.0
+            ),
+            "decision_scope": "Injected fault coordinates; success means error within 1.5x sensor reference scale.",
+        },
         "unresolved_points": int((results["status"] == "Unresolved").sum()),
         "fault_distribution": {
             str(key): int(value)

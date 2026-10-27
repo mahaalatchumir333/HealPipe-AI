@@ -22,11 +22,10 @@
                 <p class="eyebrow">Self-healing pipeline monitoring</p>
                 <h1>Operational trust for complex hydraulic sensor systems.</h1>
                 <p class="subtitle">
-                    Detect anomalies, estimate repairs, and keep mission-critical monitoring pipelines online.
+                    Diagnose telemetry faults, score candidate repairs, and explicitly accept a repair or abstain when evidence is insufficient.
                 </p>
                 <div class="cta-row">
                     <a class="primary" href="/dashboard">Open dashboard</a>
-                    <button class="secondary" id="demoRunButton">Run demo analysis</button>
                 </div>
             </div>
             <div class="hero-panel">
@@ -46,40 +45,20 @@
         </header>
 
         <main class="content-grid">
-            <section class="panel" id="accountPanel">
-                <h2>Account access</h2>
-                <p class="subtitle">Create an account or sign in before submitting telemetry runs.</p>
-                <div class="form-grid">
-                    <label>Username<input id="authUsername" autocomplete="username" minlength="3" maxlength="80" /></label>
-                    <label>Password<input id="authPassword" type="password" autocomplete="current-password" minlength="12" /></label>
-                    <label>MFA code (if enabled)<input id="mfaCode" inputmode="numeric" maxlength="6" /></label>
-                </div>
-                <div class="cta-row">
-                    <button class="primary" id="loginButton">Sign in</button>
-                    <button class="secondary" id="registerButton">Create account</button>
-                    <button class="secondary" id="mfaSetupButton">Set up MFA</button>
-                    <button class="secondary" id="mfaConfirmButton">Confirm MFA</button>
-                </div>
-                <p id="authMessage" role="status" aria-live="polite"></p>
-            </section>
             <section class="panel">
-                <h2>Upload telemetry</h2>
-                <p>CSV or Parquet with cycle_id, second_in_cycle, and all 10 sensor columns. Maximum 25 MB and 100,000 rows.</p>
-                <form id="uploadForm">
-                    <label for="telemetryFile">Telemetry file</label>
-                    <input id="telemetryFile" type="file" accept=".csv,.parquet" required />
-                    <button class="primary" type="submit">Upload and analyze</button>
-                    <progress id="uploadProgress" max="100" value="0" hidden></progress>
-                    <p id="uploadStatus" role="status" aria-live="polite"></p>
-                </form>
+                <h2>Operational decision workflow</h2>
+                <p>HealPipe combines fault diagnosis, reconstruction, validation-calibrated confidence, preserved data status, and an explicit accept-or-refuse decision. Logging and data cleaning are operational components, not claimed as novel contributions.</p>
+                <ol class="workflow-list">
+                    <li><strong>Diagnose:</strong> classify missing, freeze, spike, or drift evidence.</li>
+                    <li><strong>Reconstruct:</strong> estimate affected readings using interpolation or cross-sensor predictions.</li>
+                    <li><strong>Validate:</strong> score repair confidence with a model calibrated on validation data.</li>
+                    <li><strong>Decide:</strong> accept a supported repair or refuse it and preserve a null output as Unresolved.</li>
+                    <li><strong>Audit and evaluate:</strong> retain point-level evidence and assess detection, repair accuracy, confidence reliability, and abstention together.</li>
+                </ol>
             </section>
             <section class="panel">
                 <h2>Current health snapshot</h2>
                 <div id="overviewCards" class="card-grid"></div>
-            </section>
-            <section class="panel">
-                <h2>Recent runs</h2>
-                <div id="runsTable" class="runs-list"></div>
             </section>
         </main>
     </div>

@@ -134,6 +134,8 @@ def apply_calibrated_confidence(results: pd.DataFrame) -> pd.DataFrame:
     model = joblib.load(ARTIFACT)
     probabilities = model.predict_proba(_feature_frame(results))[:, 1] * 100.0
     results["confidence"] = np.round(probabilities, 2)
+    results["confidence_method"] = "validation_calibrated_logistic_regression"
+    results["confidence_threshold"] = CONFIDENCE_THRESHOLD
     modified = results["fault_type"] != "healthy"
     unresolved = modified & (results["confidence"] < CONFIDENCE_THRESHOLD)
     resolved = modified & ~unresolved
@@ -142,6 +144,16 @@ def apply_calibrated_confidence(results: pd.DataFrame) -> pd.DataFrame:
     results.loc[unresolved, "modified"] = False
     results.loc[resolved & results["fault_type"].eq("missing"), "status"] = "Estimated"
     results.loc[resolved & results["fault_type"].ne("missing"), "status"] = "Corrected"
+    results["acceptance_decision"] = "retained"
+    results.loc[resolved, "acceptance_decision"] = "accepted"
+    results.loc[unresolved, "acceptance_decision"] = "refused"
+    results["decision_reason"] = "No fault diagnosed; measured value retained."
+    results.loc[resolved, "decision_reason"] = (
+        "Repair accepted: validation-calibrated confidence met the acceptance threshold."
+    )
+    results.loc[unresolved, "decision_reason"] = (
+        "Repair refused: confidence was below the acceptance threshold; output withheld."
+    )
     return results
 
 
@@ -166,6 +178,10 @@ def calibrate_run(results: pd.DataFrame) -> dict:
         "fault_count": int((results["fault_type"] != "healthy").sum()),
         "modified_count": int(len(modified)),
         "status_counts": {str(key): int(value) for key, value in status_counts.items()},
+        "decision_counts": {
+            str(key): int(value)
+            for key, value in results["acceptance_decision"].value_counts().items()
+        },
         "fault_counts": {str(key): int(value) for key, value in fault_counts.items()},
         "confidence_min": round(float(calibrated.min()), 2),
         "confidence_max": round(float(calibrated.max()), 2),

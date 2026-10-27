@@ -42,13 +42,15 @@ For development, open two terminals:
 python app.py
 ```
 
-Then open http://127.0.0.1:8000. Register an account with a password of at least 12 characters, sign in, and optionally enable MFA from the account panel. Use “Run demo analysis” for the validation sample, or upload CSV/Parquet telemetry with `cycle_id`, `second_in_cycle`, and all ten sensors: `PS1`, `PS2`, `PS3`, `FS1`, `FS2`, `TS1`, `TS2`, `TS3`, `TS4`, `EPS1`. Uploads are limited to 25 MB and 100,000 rows.
+Then open http://127.0.0.1:8000/dashboard for the read-only evaluation dashboard, or http://127.0.0.1:8000 for the operational workflow overview. Evaluation aggregates and corrupted/repaired demo traces are available without signing in; displaying hidden reference values remains authenticated. User-specific runs, uploads, and audit exports remain protected API operations.
 
 The OpenAPI page is available at http://127.0.0.1:8000/docs. Protected APIs require an `Authorization: Bearer <token>` header. Test/evaluation truth labels are not exposed by the web API.
 
 When `HEALPIPE_JWT_SECRET` is not set in development, the app creates a local `.healpipe-dev-secret` file so tokens remain valid across server restarts. Keep this file private and do not copy it into deployments; production requires a managed `HEALPIPE_JWT_SECRET`.
 
-The authenticated evaluation dashboard defaults to showing corrupted and repaired values only. Enable “Show hidden reference (judge mode)” to request and overlay the held-out reference trace for a demonstration. Choose a complete 60-second cycle from the cycle selector to inspect point-level diagnoses and abstentions.
+The evaluation dashboard defaults to showing corrupted and repaired values only. An authenticated client can enable “Show hidden reference (judge mode)” to request and overlay the held-out reference trace for a demonstration. Choose a complete 60-second cycle from the cycle selector to inspect point-level diagnoses, confidence scores, acceptance/refusal decisions, and abstentions.
+
+Use the deterministic fault-scenario lab to vary fault type, duration, severity, starting sensor, and one to three affected channels. The scenario passes corrupted telemetry—not reference values—to the detector and reports diagnosis precision/recall/F1, false alarms, confidence, accepted repairs, refusals, status counts, and accepted-repair success within tolerance. The dashboard overlays the selected sensor's observed and repaired values and lists point-level scenario decisions; repeat parameters to reproduce the same result. This is a demonstration/evaluation tool, not random prediction variation. Persisted run records and JSONL audit exports remain available through authenticated run APIs.
 
 ## Docker deployment
 

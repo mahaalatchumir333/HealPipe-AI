@@ -11,12 +11,13 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Quer
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.auth import (
     current_user,
     issue_token,
     new_totp_secret,
+    optional_user,
     register,
     verify_password,
     verify_totp,
@@ -36,6 +37,7 @@ from backend.service import (
     create_upload_run,
     current_metrics,
     evaluation_series,
+    evaluate_scenario,
     load_evaluation,
     select_run_series_cycle,
     sample_chart_points,
@@ -66,6 +68,30 @@ app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 class RunRequest(BaseModel):
     name: str = Field(default="dashboard-run", min_length=1, max_length=100)
     partition: str = Field(default="validation", pattern="^(validation|test)$")
+
+
+class ScenarioRequest(BaseModel):
+    partition: str = Field(default="validation", pattern="^(validation|test)$")
+    sensor_id: str = Field(default="PS1")
+    cycle_id: int | None = Field(default=None, ge=0)
+    fault_type: str = Field(pattern="^(missing|freeze|spike|drift)$")
+    start_second: int = Field(default=20, ge=1, le=59)
+    duration_seconds: int = Field(default=10, ge=1, le=30)
+    severity: float = Field(default=6.0, ge=1.0, le=12.0)
+    affected_channels: int = Field(default=1, ge=1, le=3)
+
+    @model_validator(mode="after")
+    def validate_scenario_parameters(self):
+        if self.fault_type == "freeze" and not 3 <= self.duration_seconds <= 10:
+            raise ValueError("Freeze duration must be between 3 and 10 seconds.")
+        if self.fault_type == "drift" and not 10 <= self.duration_seconds <= 30:
+            raise ValueError("Drift duration must be between 10 and 30 seconds.")
+        if self.fault_type in {"spike", "drift"} and self.severity < 3:
+            raise ValueError("Spike and drift severity must be at least 3 sensor scales.")
+        effective_duration = 1 if self.fault_type == "spike" else self.duration_seconds
+        if self.start_second + effective_duration > 60:
+            raise ValueError("The fault duration must fit within the selected 60-second cycle.")
+        return self
 
 
 class RegisterRequest(BaseModel):
@@ -184,12 +210,28 @@ def api_chart() -> dict:
 @app.get("/api/evaluation")
 def api_evaluation(
     partition: str = Query(default="test", pattern="^(validation|test)$"),
-    _: dict = Depends(current_user),
 ) -> dict:
     try:
         return load_evaluation(partition)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/scenarios/evaluate")
+def api_evaluate_scenario(request: ScenarioRequest) -> dict:
+    try:
+        return evaluate_scenario(
+            request.partition,
+            request.sensor_id,
+            request.cycle_id,
+            request.fault_type,
+            request.start_second,
+            request.duration_seconds,
+            request.severity,
+            request.affected_channels,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/evaluation/series")
@@ -198,8 +240,10 @@ def api_evaluation_series(
     sensor_id: str = Query(default="PS1"),
     cycle_id: int | None = Query(default=None, ge=0),
     include_reference: bool = Query(default=False),
-    _: dict = Depends(current_user),
+    user: dict | None = Depends(optional_user),
 ) -> dict:
+    if include_reference and user is None:
+        raise HTTPException(status_code=401, detail="Authentication is required to reveal reference values.")
     try:
         return evaluation_series(partition, sensor_id, cycle_id, include_reference)
     except ValueError as exc:

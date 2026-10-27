@@ -166,11 +166,8 @@ def test_telemetry_upload_validation():
         validate_telemetry(duplicate)
 
 
-def test_evaluation_endpoints_require_auth_and_do_not_return_private_labels(client):
-    assert client.get("/api/evaluation").status_code == 401
-    _, token = _register_and_login(client, "evaluator")
-    headers = {"Authorization": f"Bearer {token}"}
-    report = client.get("/api/evaluation?partition=test", headers=headers)
+def test_evaluation_is_read_only_public_and_reference_values_remain_protected(client):
+    report = client.get("/api/evaluation?partition=test")
     assert report.status_code == 200
     payload = report.json()
     assert payload["partition"] == "test"
@@ -179,7 +176,6 @@ def test_evaluation_endpoints_require_auth_and_do_not_return_private_labels(clie
 
     series = client.get(
         "/api/evaluation/series?partition=test&sensor_id=PS1",
-        headers=headers,
     )
     assert series.status_code == 200
     series_payload = series.json()
@@ -187,6 +183,14 @@ def test_evaluation_endpoints_require_auth_and_do_not_return_private_labels(clie
     assert "reference" not in series_payload
     assert "reference_value" not in series_payload["points"][0]
     assert "injected_fault" not in series.json()
+    assert series_payload["points"][0]["acceptance_decision"] in {"accepted", "refused", "retained"}
+    assert series_payload["points"][0]["confidence_method"] == "validation_calibrated_logistic_regression"
+    assert client.get(
+        "/api/evaluation/series?partition=test&sensor_id=PS1&include_reference=true",
+    ).status_code == 401
+
+    _, token = _register_and_login(client, "evaluator")
+    headers = {"Authorization": f"Bearer {token}"}
     reference_series = client.get(
         "/api/evaluation/series?partition=test&sensor_id=PS1&include_reference=true",
         headers=headers,
@@ -199,6 +203,61 @@ def test_evaluation_endpoints_require_auth_and_do_not_return_private_labels(clie
         headers=headers,
     )
     assert invalid_cycle.status_code == 422
+
+
+def test_scenario_api_runs_repeatable_faults_and_evaluates_full_decision(client):
+    request = {
+        "partition": "validation",
+        "sensor_id": "PS1",
+        "fault_type": "missing",
+        "start_second": 20,
+        "duration_seconds": 5,
+        "severity": 6,
+        "affected_channels": 2,
+    }
+    first = client.post("/api/scenarios/evaluate", json=request)
+    second = client.post("/api/scenarios/evaluate", json=request)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_payload = first.json()
+    second_payload = second.json()
+    assert first_payload == second_payload
+    assert first_payload["scenario"]["deterministic"] is True
+    assert len(first_payload["scenario"]["sensors"]) == 2
+    assert first_payload["metrics"]["injected_points"] == 10
+    assert {
+        "diagnosis_precision",
+        "diagnosis_recall",
+        "diagnosis_f1",
+        "accepted_repairs",
+        "refused_repairs",
+        "accepted_repair_success_rate",
+        "false_alarms_outside_injected_region",
+        "status_counts",
+    }.issubset(first_payload["metrics"])
+    assert len(first_payload["series"]["points"]) == 60
+    assert len(first_payload["fault_audit"]) == 10
+    assert "reference_value" not in first_payload["series"]["points"][0]
+    assert "injected_fault" not in first_payload["series"]["points"][0]
+    changed = client.post(
+        "/api/scenarios/evaluate",
+        json={
+            **request,
+            "fault_type": "spike",
+            "duration_seconds": 1,
+            "severity": 10,
+            "affected_channels": 1,
+        },
+    )
+    assert changed.status_code == 200
+    changed_payload = changed.json()
+    assert changed_payload["scenario"]["fault_type"] == "spike"
+    assert changed_payload["scenario"]["severity_sensor_scales"] == 10
+    assert changed_payload["series"]["observed"][20] != first_payload["series"]["observed"][20]
+    assert client.post(
+        "/api/scenarios/evaluate",
+        json={**request, "fault_type": "freeze", "duration_seconds": 2},
+    ).status_code == 422
 
 
 def test_async_run_and_upload_jobs_require_auth_and_finish(client, monkeypatch, tmp_path):

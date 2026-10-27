@@ -88,6 +88,14 @@ def current_user(
     return {"id": user["id"], "username": user["username"], "mfa_enabled": bool(user["mfa_enabled"])}
 
 
+def optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> dict | None:
+    if credentials is None:
+        return None
+    return current_user(credentials)
+
+
 def new_totp_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
 

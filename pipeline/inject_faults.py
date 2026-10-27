@@ -1,1 +1,1 @@
-from inject import *  # noqa: F401,F403
+from inject import inject, Binder  

@@ -16,7 +16,7 @@
                 <a href="#audit-inspector">Audit trail</a>
                 <a href="#evaluation">Evaluation</a>
                 <a href="#stress">Stress test</a>
-                <a href="/">Account / sign in</a>
+                <a href="/">Workflow overview</a>
             </div>
         </nav>
 
@@ -32,6 +32,48 @@
         <section class="panel" id="overview">
             <h2>Overview summary</h2>
             <div id="overviewMetrics" class="card-grid"></div>
+        </section>
+
+        <section class="panel" id="decisionOverview">
+            <h2>Repair decision workflow</h2>
+            <p>Confidence is scored by the validation-calibrated model. A repair is accepted only when it meets the configured threshold; otherwise the system refuses the repair, marks it Unresolved, and withholds the output.</p>
+            <div id="decisionMetrics" class="card-grid"></div>
+            <p class="muted">Evaluation covers diagnosis, status assignment, confidence reliability, repair acceptance/refusal, reconstruction error, and abstention—not reconstruction error alone.</p>
+        </section>
+
+        <section class="panel" id="scenarioLab">
+            <h2>Deterministic fault-scenario lab</h2>
+            <p class="muted">Change the injected input scenario to observe how diagnosis, calibrated confidence, status, repair acceptance/refusal, and error respond. The selected chart sensor is the first affected channel; additional channels follow the project sensor order. Severity is measured in robust training-set sensor scales. Spikes last one second. The same scenario parameters always produce the same input. Reference readings are used only for scoring after inference and are not returned.</p>
+            <div class="scenario-controls">
+                <label for="scenarioFaultType">Fault type
+                    <select id="scenarioFaultType">
+                        <option value="missing">Missing</option>
+                        <option value="freeze">Freeze</option>
+                        <option value="spike">Spike</option>
+                        <option value="drift">Drift</option>
+                    </select>
+                </label>
+                <label for="scenarioSeverity">Severity (sensor scales)
+                    <input id="scenarioSeverity" type="number" min="3" max="12" step="0.5" value="6" />
+                </label>
+                <label for="scenarioDuration">Duration (seconds)
+                    <input id="scenarioDuration" type="number" min="1" max="30" step="1" value="10" />
+                </label>
+                <label for="scenarioStart">Start second
+                    <input id="scenarioStart" type="number" min="1" max="59" step="1" value="20" />
+                </label>
+                <label for="scenarioChannels">Affected channels
+                    <select id="scenarioChannels">
+                        <option value="1">1 channel</option>
+                        <option value="2">2 simultaneous channels</option>
+                        <option value="3">3 simultaneous channels</option>
+                    </select>
+                </label>
+                <button class="primary" id="runScenarioButton">Run scenario</button>
+            </div>
+            <div id="scenarioResults" class="scenario-results" aria-live="polite">
+                <p>Choose a fault scenario and run it to compare the complete repair decision.</p>
+            </div>
         </section>
 
         <main class="dashboard-grid" id="sensor-explorer">
@@ -90,7 +132,7 @@
 
         <section class="panel" id="evaluation">
             <h2>Evaluation &amp; metrics</h2>
-            <p class="muted">Held-out labels are only used server-side to compute these aggregate evaluation statistics.</p>
+            <p class="muted">Private point labels remain server-side. These aggregate results evaluate the complete decision process, including whether accepted repairs meet tolerance and how often the system abstains.</p>
             <div id="evaluationSummary" class="card-grid"></div>
             <div class="evaluation-grid">
                 <div>
@@ -111,6 +153,7 @@
 
         <section class="panel" id="stress">
             <h2>Stress test &amp; simultaneous channel failures</h2>
+            <p class="muted">Counts below describe injected event sizes; they are not a controlled performance comparison by failure level.</p>
             <div id="stressSummary" class="card-grid"></div>
             <h3>Abstention log</h3>
             <div id="unresolvedTable" class="audit-table"></div>

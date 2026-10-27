@@ -158,6 +158,18 @@ button:hover, .primary:hover, .secondary:hover {
     margin-top: 28px;
 }
 
+.workflow-list {
+    display: grid;
+    gap: 12px;
+    padding-left: 22px;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.workflow-list strong {
+    color: var(--text);
+}
+
 .panel {
     background: rgba(15, 29, 45, 0.9);
     border: 1px solid rgba(255,255,255,0.06);
@@ -217,6 +229,21 @@ select {
     gap: 14px;
 }
 
+.scenario-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    align-items: end;
+}
+
+.scenario-results {
+    margin-top: 20px;
+}
+
+.scenario-results .card-grid {
+    margin-bottom: 12px;
+}
+
 label {
     display: grid;
     gap: 8px;
@@ -244,20 +271,7 @@ progress {
     margin-top: 12px;
 }
 
-.runs-list {
-    display: grid;
-    gap: 10px;
-}
 
-.run-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.05);
-}
 
 .run-item small {
     color: var(--muted);

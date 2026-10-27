@@ -88,6 +88,9 @@ function renderChart(series) {
         fault_type: series.faults?.[index] || 'healthy',
         status: series.statuses?.[index] || (series.faults?.[index] === 'healthy' ? 'Measured' : 'Corrected'),
         confidence: series.confidence?.[index] ?? 100,
+        acceptance_decision: series.points?.[index]?.acceptance_decision || 'retained',
+        decision_reason: series.points?.[index]?.decision_reason || '',
+        confidence_method: series.points?.[index]?.confidence_method || '',
         diagnosis: series.points?.[index]?.diagnosis || '',
         reasoning: series.points?.[index]?.reasoning || '',
         repair_method: series.points?.[index]?.repair_method || '',
@@ -181,7 +184,129 @@ function renderSummary(run) {
         <div class="stat-box"><label>Modified values</label><strong>${metrics.modified_count ?? 0}</strong></div>
         <div class="stat-box"><label>Fault diagnoses</label><strong>${escapeHtml(Object.entries(metrics.fault_counts || {}).map(([fault, count]) => `${fault}: ${count}`).join(' · ') || 'None')}</strong></div>
         <div class="stat-box"><label>Status breakdown</label><strong>${escapeHtml(Object.entries(metrics.status_counts || {}).map(([status, count]) => `${status}: ${count}`).join(' · ') || '—')}</strong></div>
+        <div class="stat-box"><label>Acceptance / refusal</label><strong>${escapeHtml(Object.entries(metrics.decision_counts || {}).map(([decision, count]) => `${decision}: ${count}`).join(' · ') || '—')}</strong></div>
     `;
+}
+
+function renderDecisionMetrics(report) {
+    const target = document.getElementById('decisionMetrics');
+    if (!target) return;
+    const decisions = report.decision_metrics || {};
+    const items = [
+        ['Accepted repairs', decisions.accepted_repairs],
+        ['Accepted repairs within tolerance', decisions.accepted_repair_success_rate === null || decisions.accepted_repair_success_rate === undefined
+            ? 'Not available' : `${Number(decisions.accepted_repair_success_rate).toFixed(1)}%`],
+        ['Refused / unresolved', decisions.refused_repairs],
+        ['Fault decision coverage', decisions.fault_decision_coverage === undefined
+            ? 'Not available' : `${Number(decisions.fault_decision_coverage).toFixed(1)}%`],
+    ];
+    target.innerHTML = items.map(([label, value]) => `
+        <div class="stat-box"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value ?? 'Not available')}</strong></div>
+    `).join('');
+}
+
+function renderScenarioResult(result) {
+    const target = document.getElementById('scenarioResults');
+    if (!target) return;
+    const scenario = result.scenario;
+    const metrics = result.metrics;
+    const items = [
+        ['Diagnosed correctly', `${metrics.correctly_diagnosed_points} / ${metrics.injected_points}`],
+        ['Diagnosis precision / recall / F1', `${metrics.diagnosis_precision}% / ${metrics.diagnosis_recall}% / ${metrics.diagnosis_f1}%`],
+        ['Accepted repairs', metrics.accepted_repairs],
+        ['Refused repairs', metrics.refused_repairs],
+        ['Mean accepted confidence', metrics.mean_accepted_confidence === null || metrics.mean_accepted_confidence === undefined
+            ? 'No repairs accepted' : `${metrics.mean_accepted_confidence}%`],
+        ['Accepted repairs within tolerance', metrics.accepted_repairs_within_tolerance],
+        ['Accepted repair success rate', metrics.accepted_repair_success_rate === null
+            ? 'No repairs accepted' : `${metrics.accepted_repair_success_rate}%`],
+        ['False alarms outside injected region', metrics.false_alarms_outside_injected_region],
+        ['Statuses across analyzed cycle', Object.entries(metrics.status_counts)
+            .map(([status, count]) => `${status}: ${count}`).join(' · ')],
+    ];
+    const auditRows = (result.fault_audit || []).map(point => `
+        <tr>
+            <td>${escapeHtml(point.sensor_id)}</td>
+            <td>${escapeHtml(point.second_in_cycle)}</td>
+            <td>${escapeHtml(point.fault_type)}</td>
+            <td>${escapeHtml(point.status)}</td>
+            <td>${escapeHtml(point.acceptance_decision)}</td>
+            <td>${Number(point.confidence).toFixed(1)}%</td>
+            <td>${escapeHtml(point.observed_value ?? 'missing')}</td>
+            <td>${escapeHtml(point.reconstructed_value ?? 'withheld')}</td>
+            <td>${escapeHtml(point.diagnosis)}</td>
+        </tr>
+    `).join('');
+    target.innerHTML = `
+        <p><strong>${escapeHtml(scenario.fault_type)}</strong> on ${escapeHtml(scenario.sensors.join(', '))},
+            cycle ${escapeHtml(scenario.cycle_id)}, second ${escapeHtml(scenario.start_second)},
+            duration ${escapeHtml(scenario.duration_seconds)}s
+            ${scenario.severity_sensor_scales === null ? '' : `, severity ${escapeHtml(scenario.severity_sensor_scales)} sensor scales`}.
+            ${scenario.deterministic ? 'Deterministic scenario.' : ''}</p>
+        <div class="card-grid">${items.map(([label, value]) => `
+            <div class="stat-box"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong></div>
+        `).join('')}</div>
+        <p class="muted">${escapeHtml(metrics.tolerance_definition)} False alarms count diagnoses outside the injected sensor/time region.</p>
+        <div class="audit-table"><table><thead><tr>
+            <th>Sensor</th><th>Second</th><th>Diagnosis</th><th>Status</th><th>Decision</th>
+            <th>Confidence</th><th>Observed</th><th>Output</th><th>Reason</th>
+        </tr></thead><tbody>${auditRows}</tbody></table></div>
+    `;
+}
+
+async function runFaultScenario() {
+    const button = document.getElementById('runScenarioButton');
+    const target = document.getElementById('scenarioResults');
+    if (!button || !target) return;
+    button.disabled = true;
+    button.textContent = 'Evaluating…';
+    target.innerHTML = '<p>Running the selected deterministic scenario through diagnosis, reconstruction, calibration, and decision scoring…</p>';
+    try {
+        const cycleId = document.getElementById('cycleSelect')?.value;
+        const payload = {
+            partition: document.getElementById('evaluationPartition')?.value || 'validation',
+            sensor_id: document.getElementById('sensorSelect')?.value || 'PS1',
+            cycle_id: cycleId ? Number(cycleId) : null,
+            fault_type: document.getElementById('scenarioFaultType').value,
+            severity: Number(document.getElementById('scenarioSeverity').value),
+            duration_seconds: Number(document.getElementById('scenarioDuration').value),
+            start_second: Number(document.getElementById('scenarioStart').value),
+            affected_channels: Number(document.getElementById('scenarioChannels').value),
+        };
+        const response = await fetch('/api/scenarios/evaluate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || `Scenario failed: ${response.status}`);
+        renderScenarioResult(data);
+        activeRunId = null;
+        renderSummary({
+            name: `${data.scenario.fault_type} scenario`,
+            metrics: {
+                success_probability: data.metrics.mean_accepted_confidence ?? '--',
+                modified_count: data.metrics.accepted_repairs,
+                fault_counts: { [data.scenario.fault_type]: data.metrics.injected_points },
+                status_counts: data.metrics.status_counts,
+                decision_counts: {
+                    accepted: data.metrics.accepted_repairs,
+                    refused: data.metrics.refused_repairs,
+                },
+            },
+        });
+        renderChart(data.series);
+        renderAuditTable(data.series.points.filter(point => point.fault_type !== 'healthy'));
+        renderUnresolvedPoints(data.series.points);
+        const download = document.getElementById('downloadAuditButton');
+        if (download) download.disabled = true;
+        document.getElementById('sensor-explorer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        target.innerHTML = `<p role="alert">${escapeHtml(error.message)}</p>`;
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Run scenario';
+    }
 }
 
 function inspectPoint(index) {
@@ -196,7 +321,10 @@ function inspectPoint(index) {
             <div class="stat-box"><label>Sensor / status</label><strong>${escapeHtml(point.sensor_id)} / ${escapeHtml(point.status)}</strong></div>
             <div class="stat-box"><label>Observed → output</label><strong>${escapeHtml(point.observed_value ?? 'missing')} → ${escapeHtml(point.reconstructed_value ?? 'unresolved')}</strong></div>
             <div class="stat-box"><label>Diagnosis / confidence</label><strong>${escapeHtml(point.fault_type)} / ${Number(point.confidence).toFixed(1)}%</strong></div>
+            <div class="stat-box"><label>Decision</label><strong>${escapeHtml(point.acceptance_decision || 'not recorded')}</strong></div>
         </div>
+        <p><strong>Decision rationale:</strong> ${escapeHtml(point.decision_reason || 'Decision metadata unavailable.')}</p>
+        <p><strong>Confidence scoring:</strong> ${escapeHtml(point.confidence_method || 'scoring method unavailable')}</p>
         <p><strong>Method:</strong> ${escapeHtml(point.repair_method || 'measured_input')}</p>
         <p><strong>Supporting channels:</strong> ${escapeHtml((point.supporting_sensors || []).join(', ') || 'None available')}</p>
         <p><strong>Reason:</strong> ${escapeHtml(point.reasoning || point.diagnosis || 'No fault evidence; original measurement retained.')}</p>
@@ -226,6 +354,7 @@ function renderAuditTable(events) {
                 <td>${escapeHtml(event.sensor_id)}</td>
                 <td>${escapeHtml(event.fault_type)}</td>
                 <td>${escapeHtml(event.status)}</td>
+                <td>${escapeHtml(event.acceptance_decision || 'not recorded')}</td>
                 <td>${escapeHtml(event.observed_value ?? 'missing')}</td>
                 <td>${escapeHtml(event.reconstructed_value ?? '—')}</td>
                 <td>${Number(event.confidence).toFixed(1)}%</td>
@@ -234,7 +363,7 @@ function renderAuditTable(events) {
         `;
     }).join('');
     target.innerHTML = `<table><thead><tr>
-        <th>Cycle</th><th>Second</th><th>Sensor</th><th>Fault</th><th>Status</th>
+        <th>Cycle</th><th>Second</th><th>Sensor</th><th>Fault</th><th>Status</th><th>Decision</th>
         <th>Observed</th><th>Repaired</th><th>Confidence</th><th>Diagnosis</th>
         </tr></thead><tbody>${rows}</tbody></table>`;
     target.querySelectorAll('[data-point-index]').forEach(row => {
@@ -264,11 +393,12 @@ function renderUnresolvedPoints(points) {
             <td>${escapeHtml(point.second_in_cycle)}</td>
             <td>${escapeHtml(point.sensor_id)}</td>
             <td>${escapeHtml(point.fault_type)}</td>
+            <td>${escapeHtml(point.acceptance_decision || 'refused')}</td>
             <td>${Number(point.confidence).toFixed(1)}%</td>
             <td>${escapeHtml(point.reasoning || point.diagnosis || 'Insufficient evidence; output withheld.')}</td>
         </tr>`;
     }).join('');
-    target.innerHTML = `<table><thead><tr><th>Cycle</th><th>Second</th><th>Sensor</th><th>Suspected fault</th><th>Confidence</th><th>Abstention reason</th></tr></thead><tbody>${rows}</tbody></table>`;
+    target.innerHTML = `<table><thead><tr><th>Cycle</th><th>Second</th><th>Sensor</th><th>Suspected fault</th><th>Decision</th><th>Confidence</th><th>Abstention reason</th></tr></thead><tbody>${rows}</tbody></table>`;
     target.querySelectorAll('[data-point-index]').forEach(row => {
         row.addEventListener('click', () => inspectPoint(Number(row.dataset.pointIndex)));
         row.addEventListener('keydown', event => {
@@ -281,6 +411,7 @@ function renderEvaluation(report) {
     const summary = document.getElementById('evaluationSummary');
     const accuracy = report.classification_report || {};
     if (!summary) return;
+    renderDecisionMetrics(report);
     const cards = [
         ['Partition', report.partition],
         ['Complete cycles', Number(report.cycles || 0).toLocaleString()],
@@ -379,12 +510,6 @@ async function loadOverview() {
         if (faultCoverage) faultCoverage.textContent = `${metrics.missing_rate || 0}% missing`;
         const confidence = document.getElementById('modelConfidence');
         if (confidence) confidence.textContent = 'Run analysis to score repairs';
-        try {
-            const runs = await getJson('/api/runs');
-            renderRunsTable(runs.runs || []);
-        } catch {
-            renderRunsTable([]);
-        }
     } catch (error) {
         console.error(error);
     }
@@ -454,9 +579,14 @@ async function loadDashboard() {
         if (systemStatus) systemStatus.textContent = 'Evaluation complete';
     } catch (error) {
         console.error(error);
+        if (error.status === 401 && includeReference) {
+            const target = document.getElementById('evaluationSummary');
+            if (target) target.innerHTML = '<p class="muted">Reference values are protected. Sign in through an authorized client before enabling judge-mode reference display.</p>';
+            return;
+        }
         if (error.status === 401) localStorage.removeItem('healpipeToken');
         const target = document.getElementById('evaluationSummary');
-        if (target) target.innerHTML = `<p class="muted">${escapeHtml(error.message)}. <a href="/">Go to account access to sign in.</a></p>`;
+        if (target) target.innerHTML = `<p class="muted">${escapeHtml(error.message)}.</p>`;
     }
 }
 
@@ -473,147 +603,35 @@ async function downloadAudit(runId) {
     URL.revokeObjectURL(url);
 }
 
-async function createDemoRun() {
-    const button = document.getElementById('demoRunButton');
-    if (button) {
-        button.disabled = true;
-        button.textContent = 'Analyzing telemetry…';
-    }
-    try {
-        const response = await fetch('/jobs', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${localStorage.getItem('healpipeToken') || ''}`,
-            },
-            body: JSON.stringify({ name: 'website-demo', partition: 'validation' }),
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || `Analysis failed: ${response.status}`);
-        if (button) button.textContent = 'Analysis queued…';
-        const job = await pollJob(payload.job_id);
-        window.location.href = `/dashboard?run=${job.run_id}`;
-    } catch (error) {
-        if (button) {
-            button.disabled = false;
-            button.textContent = 'Run demo analysis';
-        }
-        window.alert(error.message);
-    }
-}
-
-async function pollJob(jobId) {
-    for (let attempt = 0; attempt < 300; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const job = await getJson(`/jobs/${jobId}`);
-        if (job.status === 'completed') return job;
-        if (job.status === 'failed') throw new Error(job.error || 'Analysis failed.');
-    }
-    throw new Error('Analysis is still running; refresh the dashboard later.');
-}
-
-async function authenticate(path) {
-    const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: document.getElementById('authUsername').value,
-            password: document.getElementById('authPassword').value,
-            mfa_code: document.getElementById('mfaCode').value || null,
-        }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Authentication failed.');
-    if (data.access_token) {
-        localStorage.setItem('healpipeToken', data.access_token);
-        document.getElementById('authMessage').textContent = 'Signed in. You can now run analysis and upload telemetry.';
-        loadOverview();
-        return;
-    }
-    document.getElementById('authMessage').textContent = data.message || 'Account created. Sign in to continue.';
-}
-
-async function setupMfa() {
-    const response = await fetch('/auth/mfa/setup', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('healpipeToken') || ''}` },
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Unable to start MFA setup.');
-    document.getElementById('authMessage').textContent =
-        `Add this secret to an authenticator app, then confirm with a code: ${data.secret}`;
-}
-
-async function confirmMfa() {
-    const response = await fetch('/auth/mfa/confirm', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('healpipeToken') || ''}`,
-        },
-        body: JSON.stringify({ code: document.getElementById('mfaCode').value }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Unable to enable MFA.');
-    document.getElementById('authMessage').textContent = 'MFA is enabled for your account.';
-}
-
-async function submitUpload(event) {
-    event.preventDefault();
-    const fileInput = document.getElementById('telemetryFile');
-    const status = document.getElementById('uploadStatus');
-    const progress = document.getElementById('uploadProgress');
-    if (!localStorage.getItem('healpipeToken')) {
-        status.textContent = 'Sign in before uploading telemetry.';
-        return;
-    }
-    const file = fileInput.files[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append('file', file);
-    progress.hidden = false;
-    progress.value = 25;
-    status.textContent = 'Uploading and validating file…';
-    try {
-        const response = await fetch('/jobs/upload', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${localStorage.getItem('healpipeToken')}` },
-            body: form,
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Upload failed.');
-        progress.value = 60;
-        status.textContent = 'Upload accepted; analysis is running…';
-        const job = await pollJob(data.job_id);
-        progress.value = 100;
-        window.location.href = `/dashboard?run=${job.run_id}`;
-    } catch (error) {
-        status.textContent = error.message;
-        progress.value = 0;
-    }
-}
-
-function showAuthError(error) {
-    const message = document.getElementById('authMessage');
-    if (message) message.textContent = error.message;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    const demoButton = document.getElementById('demoRunButton');
     const refreshButton = document.getElementById('refreshButton');
-    const loginButton = document.getElementById('loginButton');
-    const registerButton = document.getElementById('registerButton');
-    const mfaSetupButton = document.getElementById('mfaSetupButton');
-    const mfaConfirmButton = document.getElementById('mfaConfirmButton');
-    const uploadForm = document.getElementById('uploadForm');
     const sensorSelect = document.getElementById('sensorSelect');
     const partitionSelect = document.getElementById('evaluationPartition');
     const cycleSelect = document.getElementById('cycleSelect');
     const referenceToggle = document.getElementById('showGroundTruth');
+    const scenarioType = document.getElementById('scenarioFaultType');
+    const scenarioDuration = document.getElementById('scenarioDuration');
+    const scenarioSeverity = document.getElementById('scenarioSeverity');
+    const scenarioButton = document.getElementById('runScenarioButton');
+
+    const updateScenarioInputs = () => {
+        if (!scenarioType || !scenarioDuration || !scenarioSeverity) return;
+        const fault = scenarioType.value;
+        const durationRange = fault === 'freeze' ? [3, 10]
+            : fault === 'drift' ? [10, 30]
+                : fault === 'spike' ? [1, 1] : [1, 30];
+        scenarioDuration.min = String(durationRange[0]);
+        scenarioDuration.max = String(durationRange[1]);
+        if (Number(scenarioDuration.value) < durationRange[0]
+            || Number(scenarioDuration.value) > durationRange[1]) {
+            scenarioDuration.value = String(durationRange[0]);
+        }
+        scenarioDuration.disabled = fault === 'spike';
+        scenarioSeverity.disabled = !['spike', 'drift'].includes(fault);
+    };
 
     if (document.getElementById('chartSvg')) loadDashboard();
     else loadOverview();
-    if (demoButton) demoButton.addEventListener('click', createDemoRun);
     if (refreshButton) refreshButton.addEventListener('click', loadDashboard);
     if (sensorSelect) sensorSelect.addEventListener('change', () => {
         if (cycleSelect) cycleSelect.value = '';
@@ -625,9 +643,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (cycleSelect) cycleSelect.addEventListener('change', loadDashboard);
     if (referenceToggle) referenceToggle.addEventListener('change', loadDashboard);
-    if (loginButton) loginButton.addEventListener('click', () => authenticate('/auth/login').catch(showAuthError));
-    if (registerButton) registerButton.addEventListener('click', () => authenticate('/auth/register').catch(showAuthError));
-    if (mfaSetupButton) mfaSetupButton.addEventListener('click', () => setupMfa().catch(showAuthError));
-    if (mfaConfirmButton) mfaConfirmButton.addEventListener('click', () => confirmMfa().catch(showAuthError));
-    if (uploadForm) uploadForm.addEventListener('submit', submitUpload);
+    if (scenarioType) {
+        scenarioType.addEventListener('change', updateScenarioInputs);
+        updateScenarioInputs();
+    }
+    if (scenarioButton) scenarioButton.addEventListener('click', runFaultScenario);
 });

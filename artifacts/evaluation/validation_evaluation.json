@@ -2,7 +2,7 @@
   "partition": "validation",
   "cycles": 441,
   "telemetry_seconds": 26460,
-  "duration_seconds": 449.657,
+  "duration_seconds": 239.705,
   "points": 264600,
   "injected_points": 5438,
   "detected_points": 7361,
@@ -15,6 +15,13 @@
     "Corrected": 5248,
     "Unresolved": 2063,
     "Estimated": 50
+  },
+  "decision_metrics": {
+    "accepted_repairs": 2820,
+    "refused_repairs": 1100,
+    "accepted_repair_success_rate": 96.03,
+    "fault_decision_coverage": 51.86,
+    "decision_scope": "Injected fault coordinates; success means error within 1.5x sensor reference scale."
   },
   "unresolved_points": 2063,
   "fault_distribution": {
