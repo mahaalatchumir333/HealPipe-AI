@@ -1,10 +1,33 @@
-﻿Data/
-*.parquet
-*.csv
-*.xlsx
-*.txt
-*.db
-*.joblib
+﻿# Python environments and caches
 .venv/
+venv/
 __pycache__/
-backend/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secrets
+.env
+.env.*
+!.env.example
+.healpipe-dev-secret
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Raw source data and user uploads
+Data/raw/
+Data/uploads/
+data/uploads/
+
+# Large source-code exports
+programs_final.txt
+code_only_summary.txt
+project_summary.txt
+
+# Editor / operating-system files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

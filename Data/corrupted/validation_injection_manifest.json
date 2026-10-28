@@ -1,0 +1,50 @@
+{
+  "injector_version": "v1",
+  "partition": "validation",
+  "seed": 101,
+  "scales": {
+    "PS1": 1.3349330399999648,
+    "PS2": 1.1664355500000179,
+    "PS3": 0.05885921999999977,
+    "FS1": 0.15048389999999692,
+    "FS2": 0.4722081000000003,
+    "TS1": 7.117962600000003,
+    "TS2": 6.081625200000006,
+    "TS3": 6.9066921,
+    "TS4": 7.135753800000003,
+    "EPS1": 48.57887160000045
+  },
+  "block_lengths": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "spike_k": [
+    3,
+    5,
+    8,
+    12
+  ],
+  "drift_lengths": [
+    10,
+    20,
+    30
+  ],
+  "drift_k": [
+    3,
+    6,
+    10
+  ],
+  "control_fraction": 0.3,
+  "multi_sensor_prob": 0.15,
+  "events": 598,
+  "injected_points": 5438,
+  "points_by_fault": {
+    "drift": 3630,
+    "missing": 961,
+    "freeze": 688,
+    "spike": 159
+  },
+  "total_sensor_points": 264600
+}

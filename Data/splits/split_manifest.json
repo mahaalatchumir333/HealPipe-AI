@@ -1,0 +1,17 @@
+{
+  "train": {
+    "first_cycle": 1,
+    "last_cycle": 1323,
+    "rows": 79380
+  },
+  "validation": {
+    "first_cycle": 1324,
+    "last_cycle": 1764,
+    "rows": 26460
+  },
+  "test": {
+    "first_cycle": 1765,
+    "last_cycle": 2205,
+    "rows": 26460
+  }
+}
