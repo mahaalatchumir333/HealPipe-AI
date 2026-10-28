@@ -55,7 +55,15 @@ from pipeline.reconstruct import SENSORS, SENSOR_RATES, load_model_map
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "templates"))
-UPLOADS = ROOT / "Data" / "uploads"
+UPLOADS = Path(
+    os.getenv(
+        "HEALPIPE_UPLOADS_PATH",
+        str(ROOT / "Data" / "uploads"),
+    )
+)
+
+UPLOADS.mkdir(parents=True, exist_ok=True)
+
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 UPLOADS.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,244 @@
+{
+  "partition": "test_v2",
+  "source_partition": "test",
+  "cycles": 441,
+  "telemetry_seconds": 26460,
+  "duration_seconds": 200.685,
+  "points": 264600,
+  "injected_points": 5737,
+  "detected_points": 9055,
+  "modified_points": 6792,
+  "mean_modified_confidence": 70.87,
+  "repair_mae": 4.498856177213419,
+  "repair_rmse": 15.365064021846255,
+  "status_counts": {
+    "Measured": 255545,
+    "Corrected": 6740,
+    "Unresolved": 2263,
+    "Estimated": 52
+  },
+  "decision_metrics": {
+    "accepted_repairs": 3451,
+    "refused_repairs": 939,
+    "accepted_repair_success_rate": 93.57,
+    "fault_decision_coverage": 60.15,
+    "decision_scope": "Injected fault coordinates; success means error within 1.5x sensor reference scale."
+  },
+  "false_positives": {
+    "untouched_cycles": 143,
+    "untouched_cycles_with_any_diagnosis": 143,
+    "untouched_cycle_false_positive_rate": 1.0,
+    "healthy_point_false_positive_rate": 0.018021115416262657
+  },
+  "unintended_changes": {
+    "healthy_points_diagnosed_as_fault": 4665,
+    "healthy_points_modified": 3341,
+    "scope": "Points without injected faults; includes only detector diagnoses and repairs."
+  },
+  "unresolved_points": 2263,
+  "fault_distribution": {
+    "drift": 5123,
+    "freeze": 1672,
+    "spike": 1491,
+    "missing": 769
+  },
+  "class_names": [
+    "healthy",
+    "missing",
+    "freeze",
+    "spike",
+    "drift"
+  ],
+  "confusion_matrix": [
+    [
+      254198,
+      0,
+      1420,
+      1303,
+      1942
+    ],
+    [
+      0,
+      769,
+      0,
+      0,
+      0
+    ],
+    [
+      547,
+      0,
+      252,
+      1,
+      3
+    ],
+    [
+      37,
+      0,
+      0,
+      158,
+      0
+    ],
+    [
+      763,
+      0,
+      0,
+      29,
+      3178
+    ]
+  ],
+  "classification_report": {
+    "healthy": {
+      "precision": 0.99472891271596,
+      "recall": 0.9819788845837374,
+      "f1-score": 0.988312778961447,
+      "support": 258863.0
+    },
+    "missing": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 769.0
+    },
+    "freeze": {
+      "precision": 0.1507177033492823,
+      "recall": 0.3138231631382316,
+      "f1-score": 0.20363636363636364,
+      "support": 803.0
+    },
+    "spike": {
+      "precision": 0.10596914822266935,
+      "recall": 0.8102564102564103,
+      "f1-score": 0.1874258600237248,
+      "support": 195.0
+    },
+    "drift": {
+      "precision": 0.6203396447394105,
+      "recall": 0.8005037783375315,
+      "f1-score": 0.6989992301770592,
+      "support": 3970.0
+    },
+    "accuracy": 0.9771541950113378,
+    "macro avg": {
+      "precision": 0.5743510818054643,
+      "recall": 0.7813124472631822,
+      "f1-score": 0.6156748465597189,
+      "support": 264600.0
+    },
+    "weighted avg": {
+      "precision": 0.9859106168620556,
+      "recall": 0.9771541950113378,
+      "f1-score": 0.9810344137823303,
+      "support": 264600.0
+    }
+  },
+  "repair_mae_by_sensor": {
+    "EPS1": {
+      "count": 696,
+      "mae": 33.75504674730348,
+      "rmse": 47.531768179051426
+    },
+    "FS1": {
+      "count": 1112,
+      "mae": 0.46192268504914674,
+      "rmse": 0.5384379521515222
+    },
+    "FS2": {
+      "count": 606,
+      "mae": 0.20912365190030333,
+      "rmse": 0.29293845944118535
+    },
+    "PS1": {
+      "count": 669,
+      "mae": 1.1595325366704068,
+      "rmse": 1.9420751563804382
+    },
+    "PS2": {
+      "count": 587,
+      "mae": 1.6040281727937276,
+      "rmse": 3.133087692502162
+    },
+    "PS3": {
+      "count": 318,
+      "mae": 0.1397619822408628,
+      "rmse": 0.19183084489764887
+    },
+    "TS1": {
+      "count": 648,
+      "mae": 1.82435249004235,
+      "rmse": 2.8807022576884838
+    },
+    "TS2": {
+      "count": 786,
+      "mae": 1.29671861683132,
+      "rmse": 2.33222856997543
+    },
+    "TS3": {
+      "count": 823,
+      "mae": 1.194297956157552,
+      "rmse": 2.6937718454877495
+    },
+    "TS4": {
+      "count": 547,
+      "mae": 2.6988794909955036,
+      "rmse": 3.5110830973027896
+    }
+  },
+  "repair_baselines": {
+    "forward_fill": {
+      "points": 5737,
+      "mae": 18.35871847481263,
+      "rmse": 73.97630001383354,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    },
+    "linear_interpolation": {
+      "points": 5737,
+      "mae": 11.5084118438732,
+      "rmse": 49.51112587812994,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    },
+    "cross_sensor_model": {
+      "points": 5737,
+      "mae": 3.8084599057386255,
+      "rmse": 12.9692885966499,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    }
+  },
+  "confidence_reliability": [
+    {
+      "bin": 5,
+      "count": 217,
+      "mean_confidence": 55.60294930875576,
+      "observed_success_rate": 86.63594470046083
+    },
+    {
+      "bin": 6,
+      "count": 26,
+      "mean_confidence": 64.95807692307693,
+      "observed_success_rate": 92.3076923076923
+    },
+    {
+      "bin": 7,
+      "count": 3197,
+      "mean_confidence": 74.39760400375353,
+      "observed_success_rate": 94.02564904598061
+    },
+    {
+      "bin": 8,
+      "count": 5,
+      "mean_confidence": 83.672,
+      "observed_success_rate": 100.0
+    },
+    {
+      "bin": 9,
+      "count": 6,
+      "mean_confidence": 92.87499999999999,
+      "observed_success_rate": 100.0
+    }
+  ],
+  "multi_sensor_events": {
+    "single_channel": 481,
+    "two_channels": 44,
+    "three_or_more_channels": 42,
+    "available": true
+  }
+}

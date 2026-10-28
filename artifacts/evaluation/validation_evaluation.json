@@ -1,0 +1,232 @@
+{
+  "partition": "validation",
+  "cycles": 441,
+  "telemetry_seconds": 26460,
+  "duration_seconds": 239.705,
+  "points": 264600,
+  "injected_points": 5438,
+  "detected_points": 7361,
+  "modified_points": 5298,
+  "mean_modified_confidence": 70.54,
+  "repair_mae": 5.172444673263892,
+  "repair_rmse": 17.50055332520949,
+  "status_counts": {
+    "Measured": 257239,
+    "Corrected": 5248,
+    "Unresolved": 2063,
+    "Estimated": 50
+  },
+  "decision_metrics": {
+    "accepted_repairs": 2820,
+    "refused_repairs": 1100,
+    "accepted_repair_success_rate": 96.03,
+    "fault_decision_coverage": 51.86,
+    "decision_scope": "Injected fault coordinates; success means error within 1.5x sensor reference scale."
+  },
+  "unresolved_points": 2063,
+  "fault_distribution": {
+    "drift": 4059,
+    "freeze": 1198,
+    "spike": 1143,
+    "missing": 961
+  },
+  "class_names": [
+    "healthy",
+    "missing",
+    "freeze",
+    "spike",
+    "drift"
+  ],
+  "confusion_matrix": [
+    [
+      255721,
+      0,
+      966,
+      986,
+      1489
+    ],
+    [
+      0,
+      961,
+      0,
+      0,
+      0
+    ],
+    [
+      456,
+      0,
+      232,
+      0,
+      0
+    ],
+    [
+      30,
+      0,
+      0,
+      129,
+      0
+    ],
+    [
+      1032,
+      0,
+      0,
+      28,
+      2570
+    ]
+  ],
+  "classification_report": {
+    "healthy": {
+      "precision": 0.9940988730324718,
+      "recall": 0.9867225905032374,
+      "f1-score": 0.9903969976820339,
+      "support": 259162.0
+    },
+    "missing": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 961.0
+    },
+    "freeze": {
+      "precision": 0.19365609348914858,
+      "recall": 0.3372093023255814,
+      "f1-score": 0.24602332979851538,
+      "support": 688.0
+    },
+    "spike": {
+      "precision": 0.11286089238845144,
+      "recall": 0.8113207547169812,
+      "f1-score": 0.19815668202764977,
+      "support": 159.0
+    },
+    "drift": {
+      "precision": 0.6331608770633161,
+      "recall": 0.7079889807162535,
+      "f1-score": 0.6684874496033294,
+      "support": 3630.0
+    },
+    "accuracy": 0.9811526832955404,
+    "macro avg": {
+      "precision": 0.5867553471946776,
+      "recall": 0.7686483256524107,
+      "f1-score": 0.6206128918223057,
+      "support": 264600.0
+    },
+    "weighted avg": {
+      "precision": 0.9865578472819032,
+      "recall": 0.9811526832955404,
+      "f1-score": 0.9836041085361872,
+      "support": 264600.0
+    }
+  },
+  "repair_mae_by_sensor": {
+    "EPS1": {
+      "count": 633,
+      "mae": 35.03153691084451,
+      "rmse": 50.23820406050426
+    },
+    "FS1": {
+      "count": 833,
+      "mae": 0.5488709764874476,
+      "rmse": 0.6292679062174767
+    },
+    "FS2": {
+      "count": 481,
+      "mae": 0.14552693073468664,
+      "rmse": 0.2126501633860558
+    },
+    "PS1": {
+      "count": 612,
+      "mae": 1.4416331489627239,
+      "rmse": 2.8033155948214543
+    },
+    "PS2": {
+      "count": 518,
+      "mae": 2.7159652989805245,
+      "rmse": 4.400416243970004
+    },
+    "PS3": {
+      "count": 392,
+      "mae": 0.10723148211091703,
+      "rmse": 0.16797565064458242
+    },
+    "TS1": {
+      "count": 444,
+      "mae": 1.894142368522375,
+      "rmse": 3.0814713646308185
+    },
+    "TS2": {
+      "count": 453,
+      "mae": 0.7238753305183875,
+      "rmse": 1.5138726593346599
+    },
+    "TS3": {
+      "count": 429,
+      "mae": 0.5921163733798779,
+      "rmse": 1.5570390519104287
+    },
+    "TS4": {
+      "count": 503,
+      "mae": 1.883348158522446,
+      "rmse": 2.639412984083108
+    }
+  },
+  "repair_baselines": {
+    "forward_fill": {
+      "points": 5438,
+      "mae": 19.06776034939315,
+      "rmse": 75.94169432222895,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    },
+    "linear_interpolation": {
+      "points": 5438,
+      "mae": 11.048365833569203,
+      "rmse": 46.21055969786694,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    },
+    "cross_sensor_model": {
+      "points": 5438,
+      "mae": 3.6543243996649237,
+      "rmse": 13.068078246148557,
+      "scope": "Injected points only; oracle fault coordinates are masked for baseline repair."
+    }
+  },
+  "confidence_reliability": [
+    {
+      "bin": 5,
+      "count": 126,
+      "mean_confidence": 56.21920634920635,
+      "observed_success_rate": 97.61904761904762
+    },
+    {
+      "bin": 6,
+      "count": 95,
+      "mean_confidence": 62.16610526315791,
+      "observed_success_rate": 89.47368421052632
+    },
+    {
+      "bin": 7,
+      "count": 2593,
+      "mean_confidence": 73.83650212109525,
+      "observed_success_rate": 96.18202853837255
+    },
+    {
+      "bin": 8,
+      "count": 4,
+      "mean_confidence": 89.51249999999999,
+      "observed_success_rate": 100.0
+    },
+    {
+      "bin": 9,
+      "count": 2,
+      "mean_confidence": 90.19,
+      "observed_success_rate": 100.0
+    }
+  ],
+  "multi_sensor_events": {
+    "single_channel": 472,
+    "two_channels": 47,
+    "three_or_more_channels": 26,
+    "available": true
+  }
+}

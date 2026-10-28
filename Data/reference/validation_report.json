@@ -1,0 +1,107 @@
+{
+  "checks": [
+    "PS1: OK ((2205, 6000))",
+    "PS2: OK ((2205, 6000))",
+    "PS3: OK ((2205, 6000))",
+    "FS1: OK ((2205, 600))",
+    "FS2: OK ((2205, 600))",
+    "TS1: OK ((2205, 60))",
+    "TS2: OK ((2205, 60))",
+    "TS3: OK ((2205, 60))",
+    "TS4: OK ((2205, 60))",
+    "EPS1: OK ((2205, 6000))"
+  ],
+  "failures": [],
+  "channels": {
+    "PS1": {
+      "shape": [
+        2205,
+        6000
+      ],
+      "expected_cols": 6000,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "PS2": {
+      "shape": [
+        2205,
+        6000
+      ],
+      "expected_cols": 6000,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "PS3": {
+      "shape": [
+        2205,
+        6000
+      ],
+      "expected_cols": 6000,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "FS1": {
+      "shape": [
+        2205,
+        600
+      ],
+      "expected_cols": 600,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "FS2": {
+      "shape": [
+        2205,
+        600
+      ],
+      "expected_cols": 600,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "TS1": {
+      "shape": [
+        2205,
+        60
+      ],
+      "expected_cols": 60,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "TS2": {
+      "shape": [
+        2205,
+        60
+      ],
+      "expected_cols": 60,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "TS3": {
+      "shape": [
+        2205,
+        60
+      ],
+      "expected_cols": 60,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "TS4": {
+      "shape": [
+        2205,
+        60
+      ],
+      "expected_cols": 60,
+      "nan_count": 0,
+      "inf_count": 0
+    },
+    "EPS1": {
+      "shape": [
+        2205,
+        6000
+      ],
+      "expected_cols": 6000,
+      "nan_count": 0,
+      "inf_count": 0
+    }
+  }
+}
