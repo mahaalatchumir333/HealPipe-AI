@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "https://healpipe-ai..onrender.com/"
+      "destination": "https://healpipe-ai.onrender.com/"
     },
     {
       "source": "/:path*",
